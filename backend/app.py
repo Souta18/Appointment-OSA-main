@@ -23,7 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Constants for validation
 VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
-VALID_APPOINTMENT_STATUSES = {"pending", "confirmed", "cancelled", "completed"}
+VALID_APPOINTMENT_STATUSES = {"pending", "confirmed", "cancelled", "completed", "rescheduled"}
 MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 MIN_PASSWORD_LENGTH = 8
@@ -192,6 +192,36 @@ def create_app():
                 conn.commit()
 
     _ensure_appointments_cancelled_at_column()
+
+    def _ensure_appointments_reschedule_columns():
+        # Ensure reschedule-related columns exist for existing DBs
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = :db AND TABLE_NAME = 'appointments'
+                    """
+                ),
+                {"db": config.DB_NAME},
+            ).fetchall()
+            existing = {r[0] for r in rows}
+            add = []
+            if 'reschedule_requested' not in existing:
+                add.append("ADD COLUMN reschedule_requested TINYINT(1) DEFAULT 0")
+            if 'reschedule_date' not in existing:
+                add.append("ADD COLUMN reschedule_date DATE NULL")
+            if 'reschedule_start_time' not in existing:
+                add.append("ADD COLUMN reschedule_start_time TIME NULL")
+            if 'reschedule_end_time' not in existing:
+                add.append("ADD COLUMN reschedule_end_time TIME NULL")
+            if 'reschedule_reason' not in existing:
+                add.append("ADD COLUMN reschedule_reason VARCHAR(500) NULL")
+            if add:
+                conn.execute(text(f"ALTER TABLE appointments {', '.join(add)}"))
+
+    _ensure_appointments_reschedule_columns()
 
     @app.get("/api/health")
     def health():
@@ -831,6 +861,11 @@ def create_app():
                         "start": fmt_time(r.start_time),
                         "end": fmt_time(r.end_time),
                         "status": r.status or "pending",
+                        "rescheduleRequested": bool(getattr(r, 'reschedule_requested', False)),
+                        "rescheduleDate": (r.reschedule_date.isoformat() if getattr(r, 'reschedule_date', None) else ""),
+                        "rescheduleStart": (fmt_time(getattr(r, 'reschedule_start_time', None)) if getattr(r, 'reschedule_start_time', None) else ""),
+                        "rescheduleEnd": (fmt_time(getattr(r, 'reschedule_end_time', None)) if getattr(r, 'reschedule_end_time', None) else ""),
+                        "rescheduleReason": (getattr(r, 'reschedule_reason', None) or ""),
                         "cancelledAt": (_iso_utc(getattr(r, 'cancelled_at', None)) if getattr(r, 'cancelled_at', None) else ""),
                         "cancelReason": (getattr(r, 'cancel_reason', None) or ""),
                         "adminNote": (getattr(r, 'admin_note', None) or ""),
@@ -1022,6 +1057,65 @@ def create_app():
                         obj.admin_note = str(body.get('adminNote') or body.get('admin_note') or '')[:500]
                     except Exception:
                         obj.admin_note = ''
+
+                # Reschedule request handling
+                # Accept either camelCase or snake_case fields from frontend
+                res_date_raw = body.get('rescheduleDate') or body.get('reschedule_date')
+                res_start_raw = body.get('rescheduleStart') or body.get('reschedule_start')
+                res_end_raw = body.get('rescheduleEnd') or body.get('reschedule_end')
+                res_reason = body.get('rescheduleReason') or body.get('reschedule_reason')
+                approve_res = body.get('approveReschedule') or body.get('approve_reschedule')
+
+                # If client is requesting a reschedule proposal
+                if any([res_date_raw, res_start_raw, res_end_raw, res_reason]):
+                    # Parse date
+                    parsed_res_date = None
+                    try:
+                        if res_date_raw:
+                            parsed_res_date = datetime.strptime(str(res_date_raw), "%Y-%m-%d").date()
+                    except Exception:
+                        return error_response("Invalid reschedule date format. Use YYYY-MM-DD", 400)
+
+                    # Parse times
+                    parsed_res_start = validate_time_format(res_start_raw) if res_start_raw else None
+                    parsed_res_end = validate_time_format(res_end_raw) if res_end_raw else None
+
+                    if parsed_res_start and parsed_res_end and parsed_res_start >= parsed_res_end:
+                        return error_response("Reschedule start time must be before end time", 400)
+
+                    # Do not allow rescheduling into the past
+                    if parsed_res_date and parsed_res_date < datetime.utcnow().date():
+                        return error_response("Cannot request reschedule to a past date", 400)
+
+                    obj.reschedule_requested = True
+                    obj.reschedule_date = parsed_res_date
+                    obj.reschedule_start_time = parsed_res_start
+                    obj.reschedule_end_time = parsed_res_end
+                    try:
+                        obj.reschedule_reason = str(res_reason)[:500] if res_reason else None
+                    except Exception:
+                        obj.reschedule_reason = None
+                    # Mark appointment as rescheduled (proposal) — requires admin approval to become confirmed/ongoing
+                    obj.status = 'rescheduled'
+
+                # If admin approves a pending reschedule request
+                if approve_res:
+                    # Only allow approve when there is a proposed reschedule
+                    if getattr(obj, 'reschedule_requested', False) and getattr(obj, 'reschedule_date', None):
+                        # Promote proposed values to appointment
+                        if getattr(obj, 'reschedule_date', None):
+                            obj.date = obj.reschedule_date
+                        if getattr(obj, 'reschedule_start_time', None):
+                            obj.start_time = obj.reschedule_start_time
+                        if getattr(obj, 'reschedule_end_time', None):
+                            obj.end_time = obj.reschedule_end_time
+                        # Promote to confirmed (ongoing) and clear reschedule fields
+                        obj.status = 'confirmed'
+                        obj.reschedule_requested = False
+                        obj.reschedule_date = None
+                        obj.reschedule_start_time = None
+                        obj.reschedule_end_time = None
+                        obj.reschedule_reason = None
 
                 s.add(obj)
                 s.commit()

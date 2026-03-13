@@ -74,6 +74,12 @@ class Appointment(Base):
     cancelled_at = Column(DateTime, nullable=True)
     cancel_reason = Column(String(500), nullable=True)
     admin_note = Column(String(500), nullable=True)
+    # Reschedule request fields
+    reschedule_requested = Column(Boolean, default=False)
+    reschedule_date = Column(Date, nullable=True)
+    reschedule_start_time = Column(Time, nullable=True)
+    reschedule_end_time = Column(Time, nullable=True)
+    reschedule_reason = Column(String(500), nullable=True)
     
     student_id = Column(Integer, ForeignKey("students.id"))
     guest_id = Column(Integer, ForeignKey("guest_accounts.id"))

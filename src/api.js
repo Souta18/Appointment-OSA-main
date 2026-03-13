@@ -162,6 +162,25 @@ export async function updateAppointmentStatus(id, status, extra = {}) {
   }
 }
 
+export async function requestReschedule(id, date, start, end, reason) {
+  try {
+    if (!id || !date) return { ok: false, error: 'Missing appointment ID or date' }
+    return await updateAppointmentStatus(id, 'pending', { rescheduleDate: date, rescheduleStart: start, rescheduleEnd: end, rescheduleReason: reason })
+  } catch (e) {
+    return { ok: false, error: 'Unable to connect. Please check your internet connection and try again.' }
+  }
+}
+
+export async function approveReschedule(id) {
+  try {
+    if (!id) return { ok: false, error: 'Missing appointment ID' }
+    // Approving also promotes the reschedule; backend will apply proposed values
+    return await updateAppointmentStatus(id, 'confirmed', { approveReschedule: true })
+  } catch (e) {
+    return { ok: false, error: 'Unable to connect. Please check your internet connection and try again.' }
+  }
+}
+
 // ============================================================================
 // AUTHENTICATION API
 // ============================================================================

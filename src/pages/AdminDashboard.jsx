@@ -1030,13 +1030,18 @@ useEffect(() => {
                 <input type="email" value={selectedAppointment.email} readOnly style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ddd', background:'#f7f7f7'}} />
               </div>
 
-              <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:18}}>
+                <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:18}}>
                 <button className="close-btn" onClick={() => setRescheduleOpen(false)}>Back</button>
-                <button className="approve-btn" onClick={() => {
-                  // apply reschedule: update appointment date/time and set to rescheduled
+                <button className="approve-btn" onClick={async () => {
+                  // Call backend to apply and approve reschedule
+                  try {
+                    await updateAppointmentStatus(selectedAppointment.id, 'confirmed', { rescheduleDate: rescheduleData.date, rescheduleStart: rescheduleData.start, rescheduleEnd: rescheduleData.end, rescheduleReason: rescheduleData.reason, approveReschedule: true })
+                  } catch (e) {
+                    // ignore - we'll refresh to get server state
+                  }
+                  // update local UI for immediate feedback
                   const resAt = Date.now()
-                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, date: rescheduleData.date || a.date, iso: (rescheduleData.date || a.date) ? (rescheduleData.date || a.date) : a.iso, start: rescheduleData.start || a.start, end: rescheduleData.end || a.end, reason: rescheduleData.reason || a.reason, status: 'rescheduled', rescheduledAt: resAt } : a))
-                  // notify student
+                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, date: rescheduleData.date || a.date, iso: (rescheduleData.date || a.date) ? (rescheduleData.date || a.date) : a.iso, start: rescheduleData.start || a.start, end: rescheduleData.end || a.end, reason: rescheduleData.reason || a.reason, status: 'confirmed', rescheduledAt: resAt } : a))
                   try {
                     const rawNot = localStorage.getItem('notifications')
                     const arr = rawNot ? JSON.parse(rawNot) : []
@@ -1046,6 +1051,7 @@ useEffect(() => {
                   setRescheduleOpen(false)
                   setDetailsOpen(false)
                   setSelectedAppointment(null)
+                  refreshAppointments()
                 }}>Send</button>
               </div>
             </div>
