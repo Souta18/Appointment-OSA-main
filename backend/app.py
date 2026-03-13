@@ -23,7 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Constants for validation
 VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
-VALID_APPOINTMENT_STATUSES = {"pending", "confirmed", "cancelled", "completed", "rescheduled"}
+VALID_APPOINTMENT_STATUSES = {"pending", "approved", "confirmed", "cancelled", "completed", "rescheduled"}
 MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 MIN_PASSWORD_LENGTH = 8
@@ -1026,6 +1026,9 @@ def create_app():
                 # Update status if provided
                 if "status" in body:
                     status = (body["status"] or "").lower()
+                    # Accept frontend alias 'done' and map to backend 'completed'
+                    if status == 'done':
+                        status = 'completed'
                     if not validate_appointment_status(status):
                         return error_response(f"Invalid status. Must be one of: {', '.join(VALID_APPOINTMENT_STATUSES)}", 400)
                     # If cancelling, record cancelled_at timestamp

@@ -19,6 +19,7 @@ export default function AdminDashboard() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [isApproving, setIsApproving] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [rescheduleData, setRescheduleData] = useState({ date: '', start: '', end: '', reason: '' })
   const [showDeclineModal, setShowDeclineModal] = useState(false)
@@ -182,7 +183,7 @@ useEffect(() => {
   }).length;
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length
-  const doneCount = appointments.filter(a => a.status === 'confirmed' || a.status === 'done').length
+  const doneCount = appointments.filter(a => (a.status || '').toLowerCase() === 'completed' || (a.status || '').toLowerCase() === 'done').length
   const cancelledCount = appointments.filter(a => a.status === 'cancelled' || a.status === 'declined').length
 
   // Helpers to format time values
@@ -449,6 +450,85 @@ useEffect(() => {
     }
   }
 
+  // Render action buttons for the details modal (keeps JSX here simpler)
+  const renderDetailsActions = () => {
+    if (!selectedAppointment) return null
+    const status = selectedAppointment.status
+
+    if (status === 'pending') {
+      return (
+        <>
+          <button className="decline-btn" onClick={() => { setDeclineReason(''); setShowDeclineModal(true) }}>Decline</button>
+          <button className="approve-btn" onClick={() => {
+            setIsApproving(true)
+            updateAppointmentStatus(selectedAppointment.id, 'approved').then(() => {
+              try {
+                const raw = localStorage.getItem('notifications')
+                const arr = raw ? JSON.parse(raw) : []
+                arr.unshift({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment approved', message: `Your appointment on ${selectedAppointment.date || selectedAppointment.iso} at ${selectedAppointment.start || selectedAppointment.time} is approved.`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
+                localStorage.setItem('notifications', JSON.stringify(arr))
+              } catch (e) {}
+              setIsApproving(false)
+              setDetailsOpen(false)
+              setSelectedAppointment(null)
+              refreshAppointments()
+            })
+          }}>Approve</button>
+        </>
+      )
+    }
+
+    if (status === 'rescheduled') {
+      return (<><button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Back</button></>)
+    }
+
+    if (['declined','cancelled'].includes(status)) {
+      if (selectedAppointment.adminNote === 'Cancelled by student') return null
+      return (
+        <>
+          <button className="reschedule-open-btn" onClick={() => { setRescheduleData({ date: '', start: '', end: '', reason: '' }); setRescheduleOpen(true) }}>Reschedule</button>
+          <button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Close</button>
+        </>
+      )
+    }
+
+    if (status === 'confirmed' || status === 'approved') {
+      return (
+        <>
+          <button className="done-btn" onClick={async () => {
+            if (!selectedAppointment) return
+            setIsCompleting(true)
+            const prevAppointment = { ...selectedAppointment }
+            const optimisticallyDone = { ...selectedAppointment, status: 'completed' }
+            setSelectedAppointment(optimisticallyDone)
+            setAppointments(prev => prev.map(a => a.id === optimisticallyDone.id ? optimisticallyDone : a))
+            try {
+              const raw = localStorage.getItem('notifications')
+              const arr = raw ? JSON.parse(raw) : []
+              arr.unshift({ id: Date.now(), appointmentId: optimisticallyDone.id, title: 'Appointment completed', message: `Your appointment on ${optimisticallyDone.date || optimisticallyDone.iso} at ${optimisticallyDone.start || optimisticallyDone.time} was marked done.`, createdAt: Date.now(), read: false, email: optimisticallyDone.email || optimisticallyDone.studentEmail, studentId: optimisticallyDone.studentId, target: 'student' })
+              localStorage.setItem('notifications', JSON.stringify(arr))
+            } catch (e) {}
+            setDetailsOpen(false)
+            setSelectedAppointment(null)
+            try {
+              await updateAppointmentStatus(optimisticallyDone.id, 'completed')
+              refreshAppointments()
+            } catch (err) {
+              setAppointments(prev => prev.map(a => a.id === prevAppointment.id ? prevAppointment : a))
+              alert('Failed to mark appointment done. Please try again.')
+            } finally {
+              setIsCompleting(false)
+            }
+          }}>{isCompleting ? 'Completing...' : 'Done'}</button>
+
+          {/* Approve button removed per request; only Done remains */}
+        </>
+      )
+    }
+
+    return null
+  }
+
   return (
     <div className="admin-dashboard">
       <NavBar userType="admin" />
@@ -639,7 +719,7 @@ useEffect(() => {
                   : apt.status === 'approved' ? 'status-approved'
                   : apt.status === 'pending' ? 'status-pending'
                   : apt.status === 'rescheduled' ? 'status-rescheduled'
-                  : apt.status === 'done' ? 'status-done'
+                  : (apt.status === 'done' || apt.status === 'completed') ? 'status-done'
                   : apt.status === 'cancelled' ? 'status-cancelled'
                   : 'status-declined'
                 }`}>
@@ -680,7 +760,7 @@ useEffect(() => {
                     : apt.status === 'approved' ? 'status-approved'
                     : apt.status === 'pending' ? 'status-pending'
                     : apt.status === 'rescheduled' ? 'status-rescheduled'
-                    : apt.status === 'done' ? 'status-done'
+                    : (apt.status === 'done' || apt.status === 'completed') ? 'status-done'
                     : apt.status === 'cancelled' ? 'status-cancelled'
                     : 'status-declined'
                   }`}>
@@ -689,7 +769,7 @@ useEffect(() => {
                       : apt.status === 'approved' ? 'Ongoing'
                       : apt.status === 'pending' ? 'For Approval'
                       : apt.status === 'rescheduled' ? 'Rescheduled'
-                      : apt.status === 'done' ? 'Done'
+                      : (apt.status === 'done' || apt.status === 'completed') ? 'Done'
                       : apt.status === 'declined' ? 'Declined'
                       : 'Cancelled'
                     }
@@ -836,7 +916,7 @@ useEffect(() => {
                   : selectedAppointment.status === 'approved' ? 'status-approved'
                   : selectedAppointment.status === 'pending' ? 'status-pending'
                   : selectedAppointment.status === 'rescheduled' ? 'status-rescheduled'
-                  : selectedAppointment.status === 'done' ? 'status-done'
+                  : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? 'status-done'
                   : selectedAppointment.status === 'cancelled' ? 'status-cancelled'
                   : 'status-declined'
                 }`}>
@@ -845,7 +925,7 @@ useEffect(() => {
                       : selectedAppointment.status === 'approved' ? 'Ongoing'
                       : selectedAppointment.status === 'pending' ? 'For Approval'
                       : selectedAppointment.status === 'rescheduled' ? 'Rescheduled'
-                      : selectedAppointment.status === 'done' ? 'Done'
+                      : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? 'Done'
                       : selectedAppointment.status === 'declined' ? 'Declined'
                       : 'Cancelled'
                     }
@@ -889,86 +969,7 @@ useEffect(() => {
                 </div>
               )}
 
-              <div className="details-actions">
-                {selectedAppointment.status === 'pending' ? (
-                  <>
-                    <button className="decline-btn" onClick={() => {
-                      setDeclineReason('')
-                      setShowDeclineModal(true)
-                    }}>Decline</button>
-                    <button className="approve-btn" onClick={() => {
-                      setIsApproving(true)
-                      updateAppointmentStatus(selectedAppointment.id, 'approved').then(() => {
-                        try {
-                          const raw = localStorage.getItem('notifications')
-                          const arr = raw ? JSON.parse(raw) : []
-                          arr.unshift({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment approved', message: `Your appointment on ${selectedAppointment.date || selectedAppointment.iso} at ${selectedAppointment.start || selectedAppointment.time} is approved.`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
-                          localStorage.setItem('notifications', JSON.stringify(arr))
-                        } catch (e) {}
-                        setIsApproving(false)
-                        setDetailsOpen(false)
-                        setSelectedAppointment(null)
-                        refreshAppointments()
-                      })
-                    }}>Approve</button>
-                  </>
-                ) : selectedAppointment.status === 'rescheduled' ? (
-                  <>
-                    <button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Back</button>
-                  </>
-                ) : ['declined','cancelled'].includes(selectedAppointment.status) ? (
-                  // For admin-initiated declined/cancelled show Reschedule; if student cancelled themselves, show no actions
-                  (selectedAppointment.adminNote === 'Cancelled by student') ? (
-                    null
-                  ) : (
-                    <>
-                      <button className="reschedule-open-btn" onClick={() => {
-                        setRescheduleData({ date: '', start: '', end: '', reason: '' })
-                        setRescheduleOpen(true)
-                      }}>Reschedule</button>
-                      <button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Close</button>
-                    </>
-                  )
-                ) : (
-                  selectedAppointment.status === 'confirmed' ? (
-                    <button className="approve-btn" onClick={async () => {
-                      if (!selectedAppointment) return
-                      setIsApproving(true)
-                      const prevAppointment = { ...selectedAppointment }
-                      const optimisticallyApproved = { ...selectedAppointment, status: 'approved' }
-
-                      // apply optimistic UI update
-                      setSelectedAppointment(optimisticallyApproved)
-                      setAppointments(prev => prev.map(a => a.id === optimisticallyApproved.id ? optimisticallyApproved : a))
-
-                      // push notification locally
-                      try {
-                        const raw = localStorage.getItem('notifications')
-                        const arr = raw ? JSON.parse(raw) : []
-                        arr.unshift({ id: Date.now(), appointmentId: optimisticallyApproved.id, title: 'Appointment approved', message: `Your appointment on ${optimisticallyApproved.date || optimisticallyApproved.iso} at ${optimisticallyApproved.start || optimisticallyApproved.time} is approved.`, createdAt: Date.now(), read: false, email: optimisticallyApproved.email || optimisticallyApproved.studentEmail, studentId: optimisticallyApproved.studentId, target: 'student' })
-                        localStorage.setItem('notifications', JSON.stringify(arr))
-                      } catch (e) {}
-
-                      // close details for immediate feedback
-                      setDetailsOpen(false)
-                      setSelectedAppointment(null)
-
-                      try {
-                        await updateAppointmentStatus(optimisticallyApproved.id, 'approved')
-                        setIsApproving(false)
-                        refreshAppointments()
-                      } catch (err) {
-                        // revert optimistic change on failure
-                        setAppointments(prev => prev.map(a => a.id === prevAppointment.id ? prevAppointment : a))
-                        setIsApproving(false)
-                        alert('Failed to approve appointment. Please try again.')
-                      }
-                    }}>
-                      {isApproving ? 'Approving...' : 'Approve'}
-                    </button>
-                  ) : null
-                )}
-              </div>
+              <div className="details-actions">{renderDetailsActions()}</div>
             </div>
           </div>
         )}

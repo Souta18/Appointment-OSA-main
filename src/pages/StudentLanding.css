@@ -193,6 +193,11 @@
   background: rgba(76, 175, 80, 0.2);
 }
 
+/* card style for completed appointments (alias for done) */
+.card-completed {
+  background: rgba(76, 175, 80, 0.12);
+}
+
 .card-approved {
   background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
 }
@@ -346,6 +351,12 @@
 }
 
 .status-done {
+  color: #2D7A2D;
+  background: rgba(45, 122, 45, 0.12);
+}
+
+/* completed status (alias for done) */
+.status-completed {
   color: #2D7A2D;
   background: rgba(45, 122, 45, 0.12);
 }
