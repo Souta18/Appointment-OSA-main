@@ -1,0 +1,563 @@
+/* Admin Dashboard - updated to match design */
+:root{
+  --radius-lg: 18px;
+  --shadow-card: 0 14px 30px rgba(16,24,40,0.08);
+  --shadow-soft: 0 8px 18px rgba(16,24,40,0.06);
+  --text-dark: #0f172a;
+  --muted: rgba(15,23,42,0.45);
+  --nc-blue: #0B63B7;
+}
+
+.admin-dashboard{
+  position:relative;
+  min-height:100vh;
+  /* gradient kept on top via ::after, image moved to ::before for filtering */
+  background: transparent;
+  overflow:hidden;
+}
+
+/* Background image layer (blur + dim) */
+.admin-dashboard::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background-image: url('/Images/Nc\ Building.png');
+  background-size: cover;
+  background-position: center;
+  filter: blur(6px) brightness(0.7);
+  transform: scale(1.03);
+  z-index:0;
+  pointer-events:none;
+}
+
+/* Optional gradient overlay to keep header readable */
+.admin-dashboard::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: linear-gradient(0deg, rgba(64,87,126,0.35), rgba(64,87,126,0.25));
+  z-index:0;
+  pointer-events:none;
+}
+
+.admin-main{
+  max-width:1400px;
+  margin:0 auto;
+  padding:28px 28px 64px 96px; /* keep room for app sidebar */
+  position:relative;
+  z-index:1; /* keep content above the blurred background */
+}
+
+/* Appointment overview panel */
+.overview-panel{
+  background: #fff;
+  padding: 28px;
+  border-radius: 22px;
+  box-shadow: 0 22px 48px rgba(2,6,23,0.08);
+  margin-bottom:22px;
+}
+
+.overview-title{ font-size:28px; font-weight:800; margin:0 0 14px }
+
+/* Create User button moved into NavBar dropdown for admins */
+
+.admin-stats{
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap:24px;
+  margin:0;
+}
+
+.stat-card{
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+  border: 3px solid rgba(0, 0, 0, 0.04);
+}
+
+.stat-info{ /* helper if needed by markup */
+  display:flex;
+  flex-direction:column;
+}
+
+.stat-label{
+  font-size:14px;
+  font-weight:700;
+  color:var(--muted);
+}
+
+/* numeric value in each stat card */
+.stat-value{ font-size:26px; font-weight:800; margin-top:6px }
+
+.stat-icon{
+  width:64px;
+  height:64px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+  box-shadow: var(--shadow-soft);
+}
+
+.stat-card > div:first-child { display:flex; flex-direction:column; }
+.stat-label{ font-size:13px; font-weight:600; color:var(--muted); }
+
+.icon-calendar{ background: rgba(255,210,140,0.45); color:#7a3e00 }
+.icon-pending{ background: rgba(200,215,255,0.6); color:#12327a }
+.icon-done{ background: rgba(200,245,210,0.6); color:#0a6f2e }
+.icon-cancelled{ background: rgba(255,200,200,0.6); color:#7a0a0a }
+
+.admin-stats{ grid-template-columns: repeat(4, 1fr); gap:24px }
+
+.stat-date{ background: linear-gradient(180deg,#FFF2D9,#FFE6A7); color:#9A5B00 }
+.stat-pending{ background: linear-gradient(180deg,#FEEFEA,#FFD6C3); color:#7A3B00 }
+.stat-confirmed{ background: linear-gradient(180deg,#E9FFEE,#CFF8D6); color:#0E8A32 }
+.stat-cancelled{ background: linear-gradient(180deg,#FFECEC,#FFD6D6); color:#A33131 }
+
+.admin-content{
+  display:grid;
+  /* give more room to the sidebar so cards don't feel crowded */
+  grid-template-columns: 1fr 420px;
+  gap:32px;
+}
+
+.admin-content.availability-fullwidth{
+  grid-template-columns: 1fr;
+}
+
+.admin-content.analytics-fullwidth{ grid-template-columns: 1fr; }
+
+@media (max-width:1100px){
+  .admin-content{ grid-template-columns: 1fr; }
+}
+
+@media (max-width:740px){
+  .admin-main{ padding-left:16px; padding-right:16px }
+  .admin-stats{ grid-template-columns: repeat(2, 1fr) }
+}
+
+/* Calendar */
+.admin-calendar-section{
+  background:#fff;
+  border-radius:18px;
+  padding:22px;
+  box-shadow: var(--shadow-card);
+}
+
+.calendar-nav{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:12px;
+  margin-bottom:18px;
+}
+
+.calendar-nav button{
+  width:36px;
+  height:36px;
+  border-radius:8px;
+  border:none;
+  background: #f3f6fb;
+  color:var(--nc-blue);
+  cursor:pointer;
+  box-shadow: var(--shadow-soft);
+}
+  .sidebar-card-left .sidebar-card-icon{ width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow: 0 6px 12px rgba(2,6,23,0.06); margin-top:30px }
+.calendar-nav span{
+  font-weight:700;
+  font-size:16px;
+  color:var(--text-dark);
+}
+
+.weekdays{ display:grid; grid-template-columns: repeat(7, 1fr); margin-bottom:8px }
+.weekdays span{ text-align:center; font-weight:700; color:var(--muted); font-size:12px }
+
+.calendar-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:12px }
+.calendar-grid .day{ min-height:72px; display:flex; align-items:center; justify-content:center; font-weight:600; color:var(--text-dark); border-radius:12px; position:relative; cursor:pointer }
+.calendar-grid .day .day-number{ z-index:2 }
+.calendar-grid .day.blank{ visibility:hidden }
+.calendar-grid .day.selected{ background:#0B63B7; color:#fff; box-shadow: 0 8px 16px rgba(11,99,183,0.18) }
+
+/* status indicator dots under each day */
+.day-indicators{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); display:flex; gap:8px }
+.dot{ width:10px; height:10px; border-radius:50%; box-shadow: 0 4px 8px rgba(2,6,23,0.12) }
+.dot-confirmed{ background:#2FC26A }
+.dot-pending{ background:#2EA8F0 }
+.dot-cancelled{ background:#E06B6B }
+.dot-declined{ background:#F6B26B }
+.dot-done{ background:#2FC26A }
+.dot-approved{ background:#2EA8F0 }
+
+/* Sidebar / appointment list */
+.admin-sidebar{ display:flex; flex-direction:column; gap:16px; background:#fff; padding:24px; border-radius:18px; box-shadow: var(--shadow-card) }
+.sidebar-section{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px }
+.sidebar-section h3{ font-size:18px; font-weight:700; color:var(--text-dark) }
+.sidebar-link{
+  display:inline-block;
+  padding:6px 10px;
+  background: rgba(11,99,183,0.06);
+  color: #0B63B7;
+  font-weight:700;
+  border: 1px solid rgba(11,99,183,0.12);
+  border-radius:8px;
+  font-size:13px;
+  cursor:pointer;
+  text-decoration:none;
+}
+.sidebar-link:hover{ background: rgba(11,99,183,0.12); box-shadow: 0 8px 20px rgba(11,99,183,0.06) }
+
+.sidebar-card{
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  gap:20px;
+  padding:28px 36px 84px; /* more bottom padding for long text */
+  border-radius:18px;
+  box-shadow: 0 18px 48px rgba(2,6,23,0.10);
+  overflow:hidden;
+  min-height:220px; /* increased for more breathing room */
+  background: linear-gradient(180deg, #EAF6FA 0%, #E1F0F4 100%);
+  color: #0f172a;
+}
+
+/* Ongoing (confirmed) -> orange */
+.sidebar-card.status-confirmed{ background: #FFF4EA }
+.sidebar-card.status-pending{ background: #E6F4FB }
+.sidebar-card.status-approved{ background: linear-gradient(180deg,#E9FFEE,#CFF8D6); color: #0E8A32 }
+.sidebar-card.status-cancelled{ background: linear-gradient(180deg,#FFF1F2,#FDE6E6); color:#6b2a2a }
+.sidebar-card.status-pending{ background: linear-gradient(180deg,#E6F7FF,#D6F0FF); color:#083a66 }
+.sidebar-card.status-declined{ background: #FFF0F0 }
+/* Done -> green */
+.sidebar-card.status-done{ background: #E8FCEC }
+/* Rescheduled -> orange */
+.sidebar-card.status-rescheduled{ background: #FFF6ED }
+
+.sidebar-card.status-rescheduled .sidebar-card-icon{ background: #FF9833; color:#fff }
+.sidebar-card-status.status-rescheduled{ background: rgba(255,152,51,0.12); color: #D9730D }
+
+
+.sidebar-card-left { display:flex; flex-direction:column; align-items:center; gap:8px; min-width:90px }
+.sidebar-card-left .sidebar-card-icon{ width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow: 0 6px 12px rgba(2,6,23,0.06) }
+/* icon colors: confirmed -> orange, done -> green */
+.sidebar-card.status-confirmed .sidebar-card-icon{ background: #FF9833; color:#fff }
+.sidebar-card.status-pending .sidebar-card-icon{ background: #5fbcf3; color:#fff }
+.sidebar-card.status-approved .sidebar-card-icon{ background: #2FC26A; color:#fff }
+.sidebar-card.status-cancelled .sidebar-card-icon{ background: #E06B6B; color:#fff }
+.sidebar-card.status-declined .sidebar-card-icon{ background: #E06B6B; color:#fff }
+.sidebar-card.status-done .sidebar-card-icon{ background: #28C03A; color:#fff }
+
+.sidebar-card-info{ display:flex; flex-direction:column; flex:1; justify-content:flex-start; min-width:0 }
+.sidebar-card-name{ font-weight:600; font-size:20px; color:var(--text-dark); margin-top:36px; line-height:1.05; white-space:normal; overflow-wrap:break-word; word-break:break-word }
+.sidebar-card-course{ font-size:16px; color:#445566; margin-top:4px; font-weight:700 }
+.sidebar-card-time{ margin-top:12px; color:var(--muted) }
+.sidebar-card-reason{ margin-top:10px; color:#333 }
+.sidebar-card-identifier{ margin-top:8px; color:rgba(15,23,42,0.6); font-weight:700; font-size:13px }
+
+.sidebar-submitted{ color:var(--muted); margin-bottom:8px }
+.view-details-btn{ background:transparent; border:none; color:var(--nc-blue); font-weight:700; cursor:pointer }
+.sidebar-card-rightcol{ display:flex; flex-direction:column; align-items:flex-end; justify-content:space-between; min-width:140px }
+
+/* status pill on top-right */
+.status-pill{ position:absolute; top:14px; right:18px; background:#cfecff; color:#0b63b7; padding:8px 14px; border-radius:14px; font-weight:700; box-shadow: 0 8px 20px rgba(11,99,183,0.12) }
+
+/* Meta label (top-left) and status (top-right) */
+.sidebar-card-meta{
+  position:absolute;
+  top:12px;
+  left:16px;
+  right:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.sidebar-card-time-meta{ font-size:13px; color:var(--muted); font-weight:600 }
+.sidebar-card-status{ font-size:13px; font-weight:800 }
+
+/* date pill at top-left */
+/* make timestamp plain text (no pill background) */
+.sidebar-card-time-meta{
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* status pill styling (top-right) */
+.sidebar-card-status{
+  display:inline-block;
+  padding:6px 12px;
+  border-radius:10px;
+  font-weight:800;
+  box-shadow: 0 8px 20px rgba(2,6,23,0.06);
+  background: rgba(255,255,255,0.85);
+}
+.sidebar-card-status.status-confirmed{ background: rgba(255,152,51,0.12); color: #D9730D }
+.sidebar-card-status.status-pending{ background: linear-gradient(180deg,#9EE3FF,#2FA8E6); color: #fff; box-shadow: 0 8px 20px rgba(47,163,230,0.12); }
+.sidebar-card-status.status-approved{ background: linear-gradient(180deg,#9CEB98,#2FC26A); color: #fff; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
+.sidebar-card-status.status-cancelled{ background: linear-gradient(180deg,#FF7B86,#C41E3A); color: #fff; box-shadow: 0 8px 20px rgba(196,30,58,0.12); }
+.sidebar-card-status.status-done{ background: rgba(47,194,106,0.08); color: #0E8A32 }
+
+/* hover / expand animation for cards */
+.sidebar-card{
+  position: relative;
+  transition: transform 220ms cubic-bezier(.2,.9,.2,1), box-shadow 220ms cubic-bezier(.2,.9,.2,1), border-radius 180ms;
+  padding: 20px 28px 40px; /* extra bottom padding so "View Details" sits lower */
+  min-height: 140px; /* increase card size */
+}
+.sidebar-card:hover{
+  transform: translateY(-10px) scale(1.01);
+  box-shadow: 0 30px 60px rgba(2,6,23,0.14);
+}
+
+/* subtle movement for the status pill when hovering */
+.sidebar-card:hover .sidebar-card-status{
+  transform: translateY(-2px);
+}
+.sidebar-card-status.status-confirmed{ color:#D9730D }
+.sidebar-card-status.status-pending{ color:#fff }
+.sidebar-card-status.status-cancelled{ color:#fff }
+.sidebar-card-status.status-done{ color:#0E8A32 }
+
+/* Plain text status variant (no pill/box) for admin dashboard */
+.status-text {
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  text-transform: none !important;
+  display: inline-block;
+  font-weight: 800;
+}
+
+/* Colored text for common statuses when using status-text */
+.status-text.status-pending { color: #0B63B7 !important; }
+.status-text.status-approved { color: #2F9B4F !important; }
+.status-text.status-cancelled { color: #A33131 !important; }
+
+/* Ensure modal/details and sidebar top-right status use plain text when .status-text is present */
+.sidebar-card-status.status-pending.status-text,
+.sidebar-card-status.status-cancelled.status-text,
+.details-status.status-pending.status-text,
+.details-status.status-cancelled.status-text {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+/* Left column: icon + small time label */
+.sidebar-card-time-left{ font-size:12px; font-weight:800; color:var(--text-dark); text-align:center }
+
+/* place View All to bottom-right similar to design */
+.sidebar-view{ position:absolute; right:24px; bottom:16px; pointer-events:auto; font-size:18px; color:var(--nc-blue); font-weight:800 }
+
+@media (max-width:768px){
+  .admin-main{ padding:16px }
+  .admin-stats{ grid-template-columns: repeat(2, 1fr) }
+  .admin-content{ grid-template-columns: 1fr }
+}
+
+/* Details modal */
+.details-modal-overlay{ position:fixed; inset:0; background: rgba(2,6,23,0.45); display:flex; align-items:center; justify-content:center; z-index:60 }
+.details-modal{ background:#fff; border-radius:14px; padding:28px; width:760px; max-width:92%; box-shadow: 0 30px 60px rgba(2,6,23,0.2); color:var(--text-dark) }
+.details-modal h2{ margin:0; font-size:32px }
+.details-modal h3{ margin:0 }
+.done-btn{ background: linear-gradient(180deg,#9CEB98,#2FC26A); border:none; color:#064; padding:14px 34px; border-radius:22px; font-weight:700; box-shadow: 0 14px 30px rgba(47,163,85,0.18); cursor:pointer; font-size:16px }
+.done-btn:active{ transform:translateY(1px) }
+
+/* status colors for modal badge */
+.details-modal .status-pending{ color:#0B63B7 }
+.details-modal .status-confirmed{ color:#D9730D }
+.details-modal .status-done{ color:#0E8A32 }
+.details-modal .status-cancelled{ color:#A33131 }
+.details-modal .status-approved{ color:#1d4ed8 }
+
+/* slide down animation */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px) scale(0.995) }
+  to { opacity: 1; transform: translateY(0) scale(1) }
+}
+.details-modal.open{ animation: slideDown 320ms cubic-bezier(.2,.9,.2,1) both }
+
+/* Details modal layout matching card design */
+.details-top{ display:flex; gap:24px; align-items:flex-start; position:relative }
+.details-main{ flex:1; margin-top:12px }
+.details-name{ margin:12px 0 0; font-size:26px; color:var(--text-dark); font-weight:600 }
+.details-course{ margin-top:6px; color:#445566; font-weight:700 }
+.details-id{ margin-top:6px; color:#2b5978; font-weight:700 }
+
+.details-status{ position:absolute; right:0; top:0; font-weight:800; color:#0B63B7 }
+.details-status.status-confirmed{ color:#D9730D }
+.details-status.status-done{ color:#0E8A32 }
+.details-status.status-pending{ color:#fff; background: linear-gradient(180deg,#9EE3FF,#2FA8E6); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(47,163,230,0.12); }
+.details-status.status-cancelled{ color:#fff; background: linear-gradient(180deg,#FF7B86,#C41E3A); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(196,30,58,0.12); }
+.details-status.status-approved{ color:#fff; background: linear-gradient(180deg,#9CEB98,#2FC26A); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
+
+/* Force plain-text color and remove pill background when status should display as text */
+.details-status.status-pending.status-text,
+.details-status.status-cancelled.status-text,
+.sidebar-card-status.status-pending.status-text,
+.sidebar-card-status.status-cancelled.status-text,
+.status-badge.status-pending.status-text,
+.status-badge.status-cancelled.status-text {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* explicit colors for plain text statuses */
+.details-status.status-pending.status-text,
+.sidebar-card-status.status-pending.status-text,
+.status-badge.status-pending.status-text,
+.status-text.status-pending {
+  color: #0B63B7 !important;
+}
+.details-status.status-cancelled.status-text,
+.sidebar-card-status.status-cancelled.status-text,
+.status-badge.status-cancelled.status-text,
+.status-text.status-cancelled {
+  color: #A33131 !important;
+}
+
+.details-section{ margin-top:22px }
+.details-section h3{ font-size:18px; margin-bottom:8px }
+.details-section p{ margin:0; color:#333; font-size:16px }
+
+.details-actions{ display:flex; justify-content:flex-end; gap:12px; margin-top:26px }
+.details-actions .done-btn{ padding:14px 34px; border-radius:20px; font-size:16px }
+.details-actions .approve-btn{ padding:14px 28px; border-radius:18px; font-size:16px }
+.details-actions .decline-btn{ padding:14px 28px; border-radius:18px; font-size:16px }
+
+/* approve/decline button styles */
+.approve-btn{ background: linear-gradient(180deg,#9CEB98,#2FC26A); border:none; color:#064; padding:14px 28px; border-radius:18px; font-weight:700; box-shadow: 0 14px 28px rgba(47,163,85,0.18); margin-left:12px; cursor:pointer; font-size:16px }
+.decline-btn{ background: linear-gradient(180deg,#FFD6D6,#FFBDBD); border:none; color:#7A1F1F; padding:14px 28px; border-radius:18px; font-weight:700; box-shadow: 0 14px 28px rgba(160,60,60,0.12); cursor:pointer; font-size:16px }
+.approve-btn:active, .decline-btn:active{ transform:translateY(1px) }
+
+/* Common button styles */
+.close-btn, .reschedule-open-btn { background:#F3F4F6; border:none; color:var(--text-dark); padding:12px 18px; border-radius:16px; font-weight:700; cursor:pointer; font-size:15px }
+.close-btn { box-shadow: 0 8px 18px rgba(2,6,23,0.06) }
+.reschedule-open-btn { background: #F8E8D6; color:#A64A2A; box-shadow: 0 8px 18px rgba(166,74,42,0.06) }
+
+/* Reschedule modal styles */
+.reschedule-modal{ background:#fff; border-radius:14px; padding:26px; width:920px; max-width:96%; box-shadow: 0 30px 60px rgba(2,6,23,0.18); color:var(--text-dark) }
+.reschedule-modal h2{ margin:0; font-size:28px }
+.reschedule-modal p{ margin:6px 0 18px 0; color:var(--muted) }
+.reschedule-modal .form-row{ display:flex; gap:18px }
+.reschedule-modal .form-col{ flex:1 }
+.reschedule-modal label{ display:block; margin-bottom:8px; font-weight:700; color:var(--muted) }
+.reschedule-modal input[type="date"], .reschedule-modal input[type="time"], .reschedule-modal input[type="email"], .reschedule-modal select, .reschedule-modal textarea{ width:100%; padding:12px 14px; border-radius:10px; border:1px solid #e6e6e6; background:#fff; box-sizing:border-box }
+.reschedule-modal input[readonly]{ background:#f7f7f7 }
+
+.reschedule-modal .actions{ display:flex; justify-content:flex-end; gap:12px; margin-top:18px }
+.reschedule-modal .actions .close-btn{ padding:10px 20px }
+
+/* Tooltip for Availability Time help */
+.help-tooltip{ display:inline-block; position:relative; margin-left:10px; width:20px; height:20px; line-height:20px; text-align:center; border-radius:50%; background:#eef6ff; color:#0B63B7; font-weight:800; font-size:12px; cursor:default }
+.help-tooltip .help-tooltip-content{ position:absolute; top:28px; left:-6px; min-width:220px; max-width:360px; background:#fff; color:var(--text-dark); border:1px solid #e6eefc; box-shadow: 0 10px 30px rgba(2,6,23,0.12); padding:10px; border-radius:10px; opacity:0; transform:translateY(-6px); pointer-events:none; transition:all 180ms ease; z-index:40 }
+.help-tooltip:hover .help-tooltip-content{ opacity:1; transform:translateY(0); pointer-events:auto }
+.help-tooltip.right .help-tooltip-content{ /* place to the right and vertically center */
+  top:50%;
+  left:28px;
+  transform:translateY(-50%) translateX(6px);
+}
+.help-tooltip-title{ font-weight:800; margin-bottom:6px; font-size:13px }
+.help-tooltip-list{ max-height:220px; overflow:auto }
+.help-tooltip-item{ font-size:13px; color:#445566; padding:6px 0; border-bottom:1px solid #f6f8fb }
+.help-tooltip-item:last-child{ border-bottom:0 }
+
+/* Availability instructions */
+.help-tooltip-desc{ font-size:13px; color:#556 }
+.reschedule-modal .actions .approve-btn{ padding:10px 20px }
+
+/* ensure overlay covers everything and modals centered */
+.details-modal-overlay{ z-index:9999 }
+
+/* Availability panel and rows */
+.availability-panel{ background:#fff; border-radius:18px; padding:24px; box-shadow: 0 22px 48px rgba(2,6,23,0.08) }
+.availability-panel h2{ margin:0; font-size:20px; font-weight:800; padding-bottom:12px; border-bottom:1px solid #eee }
+.availability-list{ margin-top:12px }
+.availability-list{ display:flex; flex-direction:column; gap:8px; padding-top:6px }
+.weekday-row{ display:flex; justify-content:space-between; align-items:center; padding:18px 12px; border-bottom:1px solid #f1f1f1 }
+.weekday-day{ display:flex; flex-direction:column }
+.weekday-name{ font-weight:600; font-size:18px; color:var(--text-dark) }
+.weekday-sub{ color:var(--muted); margin-top:6px }
+.weekday-sub.has-schedule{ color:var(--text-dark); font-weight:400 }
+.weekday-sub.no-schedule{ color:var(--muted); font-weight:600 }
+.set-schedule-btn{ background: linear-gradient(180deg,#3c72e8,#3c72e8); color:#fff; border:none; padding:10px 14px; border-radius:10px; font-weight:600; box-shadow: 0 12px 30px rgba(43,92,222,0.18); cursor:pointer }
+.set-schedule-btn:active{ transform:translateY(1px) }
+
+.time-chip{ display:inline-block; background:#f3f6fb; padding:6px 10px; border-radius:8px; margin-right:8px; font-weight:700 }
+
+/* Analytics panel styling to match card look used in Availability */
+.analytics-panel{ background:#fff; border-radius:18px; padding:20px; box-shadow: var(--shadow-card); }
+.analytics-tabs{ display:flex; align-items:center; justify-content:space-between; gap:12px }
+.tab-btn{ background:transparent; border:1px solid #eef2f7; padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer }
+.tab-btn.active{ background:#f3f6fb; border-color: rgba(11,99,183,0.12); color:var(--nc-blue) }
+.export-btn{ background: linear-gradient(180deg,#2b6cb0,#1f4f9b); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer }
+
+/* ------------------ Additional polish & interactions ------------------ */
+/* stat card hover */
+.stat-card{ transition: transform 300ms cubic-bezier(.2,.9,.2,1), box-shadow 300ms, border-color 300ms; }
+.stat-card:hover{ transform: translateY(-8px); box-shadow: 0 32px 60px rgba(2,6,23,0.14); border-color: rgba(11,99,183,0.06); }
+
+/* calendar day hover and focus */
+.calendar-grid .day{ transition: transform 220ms, box-shadow 220ms, background 220ms, color 220ms; }
+.calendar-grid .day:hover{ transform: translateY(-6px); box-shadow: 0 18px 36px rgba(2,6,23,0.12); }
+.calendar-grid .day:focus{ outline: 3px solid rgba(11,99,183,0.12); }
+
+/* day number subtle styling */
+.calendar-grid .day .day-number{ display:inline-block; padding:6px 8px; border-radius:8px; transition: background 220ms, color 220ms; }
+.calendar-grid .day.selected .day-number{ background: rgba(255,255,255,0.06); padding:6px 10px; }
+
+/* table row hover for analytics history */
+.history-table table tbody tr{ transition: background 180ms, transform 180ms; }
+.history-table table tbody tr:hover{ background: #fbfdff; transform: translateX(4px); }
+
+/* export / action buttons */
+.export-btn:hover{ filter:brightness(1.05); transform: translateY(-2px); box-shadow: 0 12px 28px rgba(11,76,150,0.18); }
+.view-details-btn:hover{ text-decoration:underline; }
+
+/* inputs and selects focus */
+input[type="date"], input[type="time"], input[type="email"], input[type="text"], select, textarea{ transition: box-shadow 160ms, border-color 160ms; }
+input:focus, select:focus, textarea:focus{ box-shadow: 0 8px 30px rgba(11,99,183,0.08); border-color: rgba(11,99,183,0.18); outline: none; }
+
+/* modal subtle entrance for overlays */
+.details-modal-overlay{ animation: overlayFade 260ms ease both; }
+@keyframes overlayFade{ from{ background: rgba(2,6,23,0.0) } to{ background: rgba(2,6,23,0.45) } }
+
+/* small card hover for analytics/availability panels */
+.analytics-panel > div, .availability-panel > .weekday-row{ transition: transform 220ms, box-shadow 220ms; }
+.analytics-panel > div:hover, .availability-panel > .weekday-row:hover{ transform: translateY(-6px); box-shadow: 0 22px 44px rgba(2,6,23,0.06); }
+
+/* scrollable appointment list improvement */
+.admin-sidebar{ max-height:720px; overflow:auto; padding-right:12px }
+.admin-sidebar::-webkit-scrollbar{ width:10px }
+.admin-sidebar::-webkit-scrollbar-thumb{ background: linear-gradient(180deg, rgba(11,99,183,0.14), rgba(11,99,183,0.22)); border-radius:10px }
+
+/* subtle entrance animation for cards when page loads */
+.stat-card, .sidebar-card{ animation: liftUp 420ms cubic-bezier(.2,.9,.2,1) both; }
+@keyframes liftUp{ from{ opacity:0; transform: translateY(10px) scale(.996) } to{ opacity:1; transform: translateY(0) scale(1) } }
+
+/* ensure buttons and pills have accessible focus states */
+.sidebar-link:focus, .export-btn:focus, .approve-btn:focus, .decline-btn:focus, .close-btn:focus{ box-shadow: 0 8px 28px rgba(11,99,183,0.12); outline: none; }
+
+/* keep image untouched as requested; additional rule to preserve background image visibility */
+.admin-dashboard{ background-blend-mode: overlay; }
+
+.history-table table{ width:100%; border-collapse:collapse }
+.history-table thead th{ color:var(--muted); padding:10px 8px; text-align:left; border-bottom:1px solid #f1f1f1 }
+.history-table tbody td{ padding:12px 8px; border-bottom:1px solid #f9f9f9 }
+.analytics-charts > div{ background:#fff; }
+
+@media (max-width:1000px){
+  .admin-content{ grid-template-columns: 1fr }
+  .analytics-charts{ flex-direction:column }
+}

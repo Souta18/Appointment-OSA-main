@@ -1,0 +1,7 @@
+.auth-title { margin-top: 0 }
+.auth-subtitle-text { margin-bottom: 1rem }
+.auth-success { background: #e6ffef; border: 1px solid #b6f0c9; color: #085e28; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-weight:700 }
+
+@media (max-width:640px){
+  .auth-success{ font-size:14px }
+}

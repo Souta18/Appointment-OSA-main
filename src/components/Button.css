@@ -1,0 +1,58 @@
+/* Figma: Group 7 - Rectangle 4 button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 24px;
+  gap: 10px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-inter);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.5;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: #0098EF;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 152, 239, 0.2);
+}
+
+.btn-primary:hover {
+  background: #007BC3;
+  box-shadow: 0 4px 12px rgba(0, 152, 239, 0.3);
+}
+
+.btn-secondary {
+  background: white;
+  border: 1.5px solid #D1D5DB;
+  color: #3D3F44;
+}
+
+.btn-secondary:hover {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.btn-blue {
+  background: #0098EF;
+  color: white;
+  box-shadow: 0px 4px 12px rgba(0, 152, 239, 0.2);
+}
+
+.btn-blue:hover {
+  background: #007BC3;
+}
+
+.btn-outline {
+  border: 2px solid white;
+  color: white;
+  background: transparent;
+}

@@ -1,0 +1,80 @@
+.walkin-main {
+  max-width: 1200px;
+  margin: 1.5rem auto;
+  padding: 1rem;
+}
+
+.two-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start }
+.panel { background: transparent; border-radius: 10px; overflow: hidden }
+.panel-inner { display: flex; gap: 20px; align-items: stretch }
+
+.hero-card { flex: 1; background: linear-gradient(135deg,#0d6fbf 0%,#0a4f9a 100%); color: #fff; padding: 28px; border-radius: 12px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; min-height:360px }
+.logo-circle { width:76px; height:76px; border-radius:999px; background: #fff3; margin-bottom:14px }
+.hero-card h3 { margin:0 0 6px; font-size:18px }
+.hero-sub { margin:0 0 12px; opacity:0.9 }
+.hero-features { list-style:none; padding:0; margin:12px 0 0; color:rgba(255,255,255,0.95) }
+.hero-features li { margin:8px 0 }
+
+.form-card { width: 420px; background: #fff; color:#222; padding:24px; border-radius:14px; box-shadow: 0 12px 30px rgba(10,20,40,0.12); display:flex; flex-direction:column; gap:12px }
+.form-card h2 { margin:0 0 8px; font-family: var(--font-montserrat); font-size:24px; color:var(--text-dark) }
+.form-card label { font-weight:600; font-size:14px; color:var(--text-dark) }
+.form-card input, .form-card select {
+  width:100%;
+  height:48px;
+  padding: 0 1rem;
+  font-size:15px;
+  background: #F3F4F6;
+  border: 1px solid #C7CCD4;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+.form-card input:focus, .form-card select:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 1px rgba(0,152,239,0.12);
+}
+.form-actions { margin-top:12px }
+.btn-confirm { background: var(--button-blue); color: white; padding: 12px 16px; border-radius:14px; border:none; height:50px; font-size:18px; font-weight:700 }
+.btn-confirm:hover { filter:brightness(1.04) }
+.walkin-message { margin-top:12px; color: #2a8f4a; font-weight:600 }
+
+@media (max-width: 980px) {
+  .two-panel { grid-template-columns: 1fr; }
+  .form-card { width: 100%; }
+  .panel-inner { flex-direction: column }
+}
+
+/* Two-panel hero layout */
+.walkin-tabs.centered-tabs { display:flex; gap:12px; justify-content:center; margin-bottom:16px }
+.walkin-tabs.centered-tabs button { padding:8px 16px; border-radius:20px; border:1px solid rgba(0,0,0,0.06); background:#f3f4f6; box-shadow: 0 6px 18px rgba(10,20,40,0.06); cursor:pointer }
+.walkin-tabs.centered-tabs button.active { background: var(--button-blue); color: #fff; border-color: transparent }
+
+.form-stack.centered { display:flex; justify-content:center }
+.forms-container { position: relative; width: 520px; max-width: 100%; height: 480px }
+.form-card { position: absolute; top: 0; left: 0; width: 100%; box-sizing: border-box; transform-origin: center; transition: transform 360ms cubic-bezier(.2,.9,.3,1), opacity 260ms ease; }
+.form-card .card-title { margin:0 0 18px; font-size:22px; text-align:center }
+.student-card { transform: translateX(0); opacity: 1; }
+.guest-card { transform: translateX(100%); opacity: 0; }
+.forms-container.show-guest .student-card { transform: translateX(-45%); opacity: 0 }
+.forms-container.show-guest .guest-card { transform: translateX(0); opacity: 1 }
+.forms-container.show-student .student-card { transform: translateX(0); opacity: 1 }
+.forms-container.show-student .guest-card { transform: translateX(45%); opacity: 0 }
+
+/* card style overrides to match Student Login */
+.form-card { background: #fff; color:#222; padding:32px; border-radius:16px; box-shadow: 0 26px 60px rgba(10,20,40,0.14); display:flex; flex-direction:column; gap:16px; box-sizing: border-box }
+.form-card label { color: var(--text-dark); font-weight:600 }
+.form-card .form-input { height:48px; padding:0 1rem; border-radius:12px; border:1px solid #C7CCD4; background:#F3F4F6 }
+.form-actions { margin-top:12px }
+.btn-confirm, .form-actions .btn { height:50px; border-radius:14px }
+
+@media (max-width: 720px) {
+  .forms-container { width: 100%; height: auto }
+  .form-card { position: relative; transform:none; opacity:1; width:100% }
+  .walkin-tabs.centered-tabs { gap:8px }
+}
+
+/* prevent horizontal overflow */
+.admin-walkin-page { overflow-x: hidden }
+
+/* center the main page title above tabs */
+.admin-walkin-page .auth-title { text-align: center; margin-bottom: 8px }

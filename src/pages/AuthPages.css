@@ -1,0 +1,188 @@
+.auth-form {
+  max-width: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}\n\n.auth-form form {\n  display: flex;\n  flex-direction: column;\n  gap: 0;\n}
+
+.auth-title {
+  font-family: var(--font-montserrat);
+  font-weight: 700;
+  font-size: 30px;
+  color: var(--text-dark);
+  margin-bottom: 0.75rem;
+}
+
+.form-actions {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-actions .auth-link {
+  display: block;
+  font-family: var(--font-inter);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--link-blue);
+  margin-bottom: 1rem;
+  text-decoration: none;
+}
+
+.form-actions .auth-link:hover {
+  text-decoration: underline;
+}
+
+.form-actions .btn {
+  width: 100%;
+}
+
+.auth-footer {
+  font-family: var(--font-inter);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-dark);
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.auth-footer a {
+  color: var(--link-blue);
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: none;
+}
+
+.w-full {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+/* Shared small subtitle for recovery / guest copy */
+.auth-subtitle-text {
+  font-family: var(--font-inter);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text-dark);
+  margin-bottom: 1.25rem;
+}
+
+.auth-error {
+  margin-top: 0.2rem;
+  margin-bottom: 0.5rem;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.auth-error-submit {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background-color: #fff5f5;
+  border: 1px solid #f87171;
+  color: #b91c1c;
+  font-size: 14px;
+  box-shadow: 0 6px 18px rgba(235, 87, 87, 0.08);
+  width: 100%;
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #16a34a;
+  color: white;
+  padding: 12px 18px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.18);
+  z-index: 9999;
+  font-weight: 600;
+}
+
+/* Spinner overlay for immediate post-login loading */
+.spinner-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.65);
+  z-index: 100001;
+}
+.spinner {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 8px solid rgba(0,0,0,0.08);
+  border-top-color: #2563eb;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Skeleton screen for post-login loading */
+.skeleton-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+}
+.skeleton-card {
+  width: 640px;
+  height: 320px;
+  border-radius: 12px;
+  background: linear-gradient(90deg,#f3f4f6,#eef2ff);
+  box-shadow: 0 12px 40px rgba(2,6,23,0.08);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.skeleton-line { height: 20px; background: linear-gradient(90deg,#e6e9ee,#f8fafc); border-radius: 6px; width: 100%; opacity: .8 }
+.skeleton-row { display:flex; gap:12px }
+.skeleton-circle { width:48px; height:48px; border-radius:50%; background:linear-gradient(90deg,#e6e9ee,#f8fafc) }
+
+.auth-instruction {
+  font-family: var(--font-inter);
+  font-size: 15px;
+  color: var(--text-dark);
+  margin-bottom: 1.25rem;
+  opacity: 0.9;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--link-blue);
+  cursor: pointer;
+}
+
+/* Back button container used on auth pages (Sign in / Sign up) */
+.auth-back {
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.auth-back .btn {
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 20px;
+  border-radius: 8px;
+  gap: 8px;
+}
+
+/* bottom placement for student forms */
+.auth-bottom {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}

@@ -1,0 +1,123 @@
+.walkin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 40px;
+  z-index: 1200;
+}
+
+.walkin-modal {
+  width: 480px;
+  height: auto;
+  max-width: calc(100% - 40px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(2,6,23,0.2);
+  padding: 28px 28px 20px 28px;
+  animation: modalPop 300ms cubic-bezier(.2,.9,.3,1) both;
+  transform-origin: center top;
+
+  /* keep modal usable on short viewports - allow internal scrolling */
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes modalPop {
+  from { transform: translateY(-18px) scale(.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.walkin-overlay { animation: overlayFade 260ms ease both }
+@keyframes overlayFade { from { opacity: 0 } to { opacity: 1 } }
+
+.walkin-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  color: #222;
+  font-weight: 800;
+}
+.walkin-header p {
+  margin: 0 0 12px 0;
+  color: #666;
+  font-size: 12px;
+}
+
+.walkin-form .form-group {
+  display: block;
+  margin-bottom: 12px;
+  padding: 8px 0; 
+}
+.walkin-form .label {
+  display: block;
+  margin-bottom: 8px;
+  color: #222;
+  font-weight: 500;
+  font-size: 17px;
+}
+.walkin-form input,
+.walkin-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.walkin-form input:focus,
+.walkin-form select:focus { border-color: #7aa2ff; box-shadow: 0 4px 14px rgba(34,102,255,0.08); }
+
+.walkin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px; 
+  padding-top: 8px;
+}
+
+/* Grid layout to reduce vertical length */
+.walkin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  align-items: start;
+}
+.walkin-form .form-group.full { grid-column: 1 / -1 }
+.walkin-form .form-group.half { grid-column: auto }
+.walkin-actions.full { grid-column: 1 / -1; justify-content: flex-end }
+
+@media (max-width: 660px) {
+  .walkin-form { grid-template-columns: 1fr; gap: 10px }
+  .walkin-form .form-group.full, .walkin-actions.full { grid-column: auto }
+}
+
+/* make sure action buttons stick visible on small screens when modal scrolls */
+.walkin-actions.full{ position: sticky; bottom: 0; background: linear-gradient(rgba(255,255,255,0), rgba(255,255,255,0.98)); padding-top:12px; margin-top:8px }
+
+/* subtle scrollbar styling for modern browsers */
+.walkin-modal::-webkit-scrollbar{ width:10px }
+.walkin-modal::-webkit-scrollbar-thumb{ background: linear-gradient(180deg, rgba(37,99,235,0.12), rgba(37,99,235,0.18)); border-radius:10px }
+
+.btn { padding: 8px 14px; border-radius: 10px; border: none; cursor: pointer; font-size:15px }
+.btn-primary { padding: 10px 16px; background: #2563eb; color: white; box-shadow: 0 6px 12px rgba(37,99,235,0.12); font-weight:800 }
+.btn-secondary { padding: 8px 14px; background: #f3f4f6; color: #111827; font-weight:700 }
+
+.req { color: #e11d48; margin-left: 4px; }
+
+/* small helper for sidebar trigger button */
+.btn-walkin {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 24px;
+  box-shadow: 0 6px 14px rgba(37,99,235,0.14);
+  cursor: pointer;
+  border: none;
+  width: 24px;
+}

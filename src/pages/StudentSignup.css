@@ -1,0 +1,67 @@
+/* Student Sign up specific styling */
+
+.student-signup-page .auth-form {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.student-signup-page .auth-title {
+  font-size: clamp(26px, 3vw, 34px);
+}
+
+.student-signup-page .auth-subtitle-text {
+  max-width: 420px;
+}
+
+.student-signup-page .btn.w-full {
+  margin-top: 1rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
+.form-select {
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  background-color: white;
+  color: #374151;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-select option {
+  color: #374151;
+}
+
+.form-select-error {
+  border-color: #EF4444;
+  background-color: #FEF2F2;
+}
+
+.form-select-error:focus {
+  border-color: #EF4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
