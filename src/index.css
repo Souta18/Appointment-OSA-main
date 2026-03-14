@@ -89,7 +89,7 @@ html {
 .status-text.status-pending,
 .status-badge.status-pending.status-text,
 .sidebar-card-status.status-pending.status-text {
-  color: #0B63B7 !important;
+  color: #60A5FA !important;
 }
 
 .status-text.status-cancelled,

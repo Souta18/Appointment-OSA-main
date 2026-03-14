@@ -11,12 +11,19 @@ export default function AdminLogin() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const errorTimer = useRef(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    const res = await adminLogin(username, password)
+    setIsSubmitting(true)
+    let res
+    try {
+      res = await adminLogin(username, password)
+    } finally {
+      setIsSubmitting(false)
+    }
     if (res?.ok) {
       try {
         localStorage.setItem('adminAuth', 'true')
@@ -26,7 +33,7 @@ export default function AdminLogin() {
     } else {
       if (errorTimer.current) clearTimeout(errorTimer.current)
       setError('Invalid credentials')
-      errorTimer.current = setTimeout(() => setError(''), 5000)
+      errorTimer.current = setTimeout(() => setError(''), 3000)
     }
   }
 
@@ -69,7 +76,7 @@ export default function AdminLogin() {
 
           {error && <div className="admin-error" role="alert">{error}</div>}
 
-          <Button type="submit" variant="primary" className="w-full">Sign in</Button>
+          <Button type="submit" variant="primary" className="w-full" loading={isSubmitting}>Sign in</Button>
 
           <Link to="/admin/forgot" className="admin-forgot">Forgot Password?</Link>
         </form>

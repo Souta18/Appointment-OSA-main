@@ -27,6 +27,11 @@ export default function AdminDashboard() {
   const [showAllModal, setShowAllModal] = useState(false)
   const [showWalkInModal, setShowWalkInModal] = useState(false)
   const [availability, setAvailability] = useState({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
+  const [showAddDatedModal, setShowAddDatedModal] = useState(false)
+  const [newDatedDate, setNewDatedDate] = useState('')
+  const [newDatedType, setNewDatedType] = useState('')
+  const [newDatedStart, setNewDatedStart] = useState('')
+  const [newDatedEnd, setNewDatedEnd] = useState('')
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [scheduleDay, setScheduleDay] = useState('')
   const [newStart, setNewStart] = useState('')
@@ -35,6 +40,7 @@ export default function AdminDashboard() {
   const [newType, setNewType] = useState('')
   const [editingAvailId, setEditingAvailId] = useState(null)
   const [editingAvailIdx, setEditingAvailIdx] = useState(null)
+  const [scheduleWarning, setScheduleWarning] = useState(false)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const [datedInputs, setDatedInputs] = useState({})
   const [analyticsTab, setAnalyticsTab] = useState('history')
@@ -119,6 +125,40 @@ useEffect(() => {
       return dt
     } catch (e) { return null }
   }
+
+    // helper: convert time like "9:30 AM" to minutes since midnight, or null
+    const toMinutes = (t) => {
+      if (!t) return null
+      const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+      if (!m) return null
+      let hh = Number(m[1])
+      const mm = Number(m[2])
+      const ampm = m[3].toUpperCase()
+      if (ampm === 'PM' && hh !== 12) hh += 12
+      if (ampm === 'AM' && hh === 12) hh = 0
+      return hh * 60 + mm
+    }
+
+    // helper: return true when appointment is currently ongoing (same date and now between start and end)
+    const isAppointmentOngoing = (apt) => {
+      try {
+        if (!apt) return false
+        const iso = apt.iso || (apt.date ? (() => {
+          const d = new Date(apt.date)
+          if (isNaN(d)) return ''
+          return d.toISOString().slice(0,10)
+        })() : '')
+        if (!iso) return false
+        const todayIso = (new Date()).toISOString().slice(0,10)
+        if (iso !== todayIso) return false
+        const startMin = toMinutes(apt.start || apt.time || '')
+        const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
+        if (startMin === null || endMin === null) return false
+        const now = new Date()
+        const nowMin = now.getHours() * 60 + now.getMinutes()
+        return nowMin >= startMin && nowMin < endMin
+      } catch (e) { return false }
+    }
 
   // push notification record and queue a placeholder email in `outbox`
   const sendNotification = (email, title, message) => {}
@@ -227,6 +267,13 @@ useEffect(() => {
         setAvailability(copy)
       }
     } else {
+      // if adding would exceed 5 anonymous ranges, show brief warning and abort
+      const anonCount = ((availability[scheduleDay] || []).filter(r => !r.date || r.date === '').length)
+      if (anonCount >= 5) {
+        setScheduleWarning(true)
+        setTimeout(() => setScheduleWarning(false), 3000)
+        return
+      }
       await addAvailability(scheduleDay, start, end, newDate)
     }
     const data = await listAvailability()
@@ -238,6 +285,29 @@ useEffect(() => {
     setNewDate('')
     setEditingAvailId(null)
     setEditingAvailIdx(null)
+  }
+
+  // Save a dated availability slot (date + type). We'll store it under the weekday of the chosen date.
+  const saveDatedSlot = async () => {
+    if (!newDatedDate) return
+    try {
+      const d = new Date(newDatedDate)
+      if (isNaN(d)) return
+      const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]
+      const start = newDatedStart || ''
+      const end = newDatedEnd || ''
+      await addAvailability(dayName, start, end, newDatedDate, newDatedType)
+    } catch (e) {
+      // ignore
+    }
+    const data = await listAvailability()
+    const avail = data && data.data ? data.data : (data || {})
+    setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
+    setNewDatedDate('')
+    setNewDatedType('')
+    setNewDatedStart('')
+    setNewDatedEnd('')
+    setShowAddDatedModal(false)
   }
 
   const cancelEdit = () => {
@@ -492,7 +562,7 @@ useEffect(() => {
       )
     }
 
-    if (status === 'confirmed' || status === 'approved') {
+    if (isAppointmentOngoing(selectedAppointment)) {
       return (
         <>
           <button className="done-btn" onClick={async () => {
@@ -546,7 +616,7 @@ useEffect(() => {
           <div className="stat-card">
             <div>
               <div className="stat-label">Pending 
-                roval</div>
+                For approval</div>
               <div className="stat-value">{pendingCount}</div>
             </div>
             <div className="stat-icon icon-pending">⏳</div>
@@ -658,7 +728,16 @@ useEffect(() => {
                           <td style={{padding:10}}>{a.name}</td>
                           <td style={{padding:10}}>{a.department || a.course || ''}</td>
                           <td style={{padding:10}}>{a.reason}</td>
-                          <td style={{padding:10}}>{a.status}</td>
+                          <td style={{padding:10}}>{
+                            a.status === 'pending' ? 'For Approval'
+                            : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
+                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
+                            : a.status === 'rescheduled' ? 'Rescheduled'
+                            : (a.status === 'done' || a.status === 'completed') ? 'Completed'
+                            : a.status === 'cancelled' ? 'Cancelled'
+                            : a.status === 'declined' ? 'Declined'
+                            : a.status
+                          }</td>
                         </tr>
                       ))}
                     </tbody>
@@ -763,16 +842,16 @@ useEffect(() => {
                     : (apt.status === 'done' || apt.status === 'completed') ? 'status-done'
                     : apt.status === 'cancelled' ? 'status-cancelled'
                     : 'status-declined'
-                  }`}>
+                  }${isAppointmentOngoing(apt) ? ' status-ongoing' : ''}`}>
                     {
-                      apt.status === 'confirmed' ? 'Ongoing'
-                      : apt.status === 'approved' ? 'Ongoing'
-                      : apt.status === 'pending' ? 'For Approval'
-                      : apt.status === 'rescheduled' ? 'Rescheduled'
-                      : (apt.status === 'done' || apt.status === 'completed') ? 'Done'
-                      : apt.status === 'declined' ? 'Declined'
-                      : 'Cancelled'
-                    }
+                        (apt.status === 'confirmed') ? (isAppointmentOngoing(apt) ? 'Ongoing' : 'Rescheduled')
+                        : (apt.status === 'approved') ? (isAppointmentOngoing(apt) ? 'Ongoing' : 'Approved')
+                        : (apt.status === 'pending') ? 'For Approval'
+                        : (apt.status === 'rescheduled') ? 'Rescheduled'
+                        : (apt.status === 'done' || apt.status === 'completed') ? <span className="status-text status-completed">Completed</span>
+                        : (apt.status === 'declined') ? 'Declined'
+                        : 'Cancelled'
+                      }
                   </span>
                 </div>
 
@@ -829,7 +908,6 @@ useEffect(() => {
                             {(availability[day] && availability[day].length) ? availability[day].map((r, i) => (
                               <div key={i} style={{marginBottom:8}}>
                                 <div style={{fontWeight:500}}>{r.start} to {r.end}</div>
-                                {r.date ? <div style={{color:'#888', fontSize:13, marginTop:4}}>{r.date}</div> : null}
                               </div>
                             )) : 'No Schedule'}
                           </div>
@@ -845,14 +923,17 @@ useEffect(() => {
 
             <div className="availability-panel">
               <div style={{background:'#fff', borderRadius:12, padding:20, boxShadow:'0 6px 18px rgba(15,23,42,0.06)'}}>
-                <h2 style={{marginTop:0}}>Available Time Slots
-                  <span className="help-tooltip" aria-label="Pre-set dated availability" style={{marginLeft:8}}>
-                    ?
-                    <div className="help-tooltip-content">
-                      <div className="help-tooltip-desc" style={{marginTop:6, fontSize:13, color:'#556'}}>List of scheduled dates and times when the dean is available. You can edit or remove a slot.</div>
-                    </div>
-                  </span>
-                </h2>
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                    <h2 style={{marginTop:0}}>Available Time Slots
+                      <span className="help-tooltip" aria-label="Pre-set dated availability" style={{marginLeft:8}}>
+                        ?
+                        <div className="help-tooltip-content">
+                          <div className="help-tooltip-desc" style={{marginTop:6, fontSize:13, color:'#556'}}>List of scheduled dates and times when the dean is available. You can edit or remove a slot.</div>
+                        </div>
+                      </span>
+                    </h2>
+                    <button className="set-dated-btn" onClick={() => { setShowAddDatedModal(true); setNewDatedDate(''); setNewDatedType(''); setNewDatedStart(''); setNewDatedEnd('') }}>Add</button>
+                  </div>
                 {datedRows.length === 0 ? (
                   <div style={{color:'#888'}}>No dated availability</div>
                 ) : (
@@ -860,28 +941,42 @@ useEffect(() => {
                     <div key={r.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderBottom:'1px solid #f7f7f7'}}>
                       <div>
                         <div style={{fontWeight:500}}>{r.day} — {r.start} to {r.end}</div>
-                        <div style={{display:'flex', alignItems:'center', gap:8, marginTop:4}}>
-                          <div style={{color:'#666', fontSize:13}}>Date</div>
-                        </div>
                       </div>
                       <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                        <input type="date" value={datedInputs[r.id] ?? r.date} onChange={e => setDatedInputs(prev => ({ ...prev, [r.id]: e.target.value }))} style={{padding:8, borderRadius:6, border:'1px solid #ddd'}} />
-                        { (datedInputs[r.id] ?? r.date) !== r.date ? (
-                          <button className="approve-btn" onClick={async () => {
-                            const newDate = datedInputs[r.id] ?? r.date
-                            const start = toInputValue(r.start) || r.start
-                            const end = toInputValue(r.end) || r.end
-                            await updateAvailability(r.id, r.day, start, end, newDate)
-                            const resp = await listAvailability()
-                            const avail = resp && resp.data ? resp.data : (resp || {})
-                            setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
-                          }}>Save</button>
-                        ) : null }
                         <button className="close-btn" onClick={() => { removeRange(r.day, (availability[r.day] || []).findIndex(x => x.id === r.id)) }}>Remove</button>
                       </div>
                     </div>
                   ))
                 )}
+                  {showAddDatedModal && (
+                    <div className="details-modal-overlay" onClick={() => setShowAddDatedModal(false)}>
+                      <div className="details-modal open" onClick={e => e.stopPropagation()} style={{maxWidth:560}}>
+                        <h2>Add dated availability</h2>
+                        <div style={{marginTop:12}}>
+                          <label style={{display:'block', marginBottom:6}}>Date</label>
+                          <input type="date" value={newDatedDate} onChange={e => setNewDatedDate(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                        </div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12}}>
+                          <div>
+                            <label style={{display:'block', marginBottom:6}}>Start time</label>
+                            <input type="time" value={newDatedStart} onChange={e => setNewDatedStart(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                          </div>
+                          <div>
+                            <label style={{display:'block', marginBottom:6}}>End time</label>
+                            <input type="time" value={newDatedEnd} onChange={e => setNewDatedEnd(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                          </div>
+                        </div>
+                        <div style={{marginTop:12}}>
+                          <label style={{display:'block', marginBottom:6}}>Type — e.g. One-time, Exam, Office hours</label>
+                          <input type="text" value={newDatedType} onChange={e => setNewDatedType(e.target.value)} placeholder="e.g. One-time, Exam, Office hours" style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                        </div>
+                        <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
+                          <button className="close-btn" onClick={() => setShowAddDatedModal(false)}>Cancel</button>
+                          <button className="approve-btn" onClick={saveDatedSlot}>Save</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -901,7 +996,9 @@ useEffect(() => {
                       <img src={`/Images/${selectedAppointment.name}.png`} alt={selectedAppointment.name} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',marginRight:12}} onError={(e)=>{ e.currentTarget.style.display='none' }} />
                     ) : null}
                     <h2 className="details-name">{selectedAppointment.name}</h2>
-                    {selectedAppointment.course && <div className="details-course">{selectedAppointment.course}</div>}
+                    {(selectedAppointment.course || selectedAppointment.department || selectedAppointment.courseName) && (
+                      <div className="details-course">{selectedAppointment.course || selectedAppointment.department || selectedAppointment.courseName}</div>
+                    )}
                     {selectedAppointment.studentId ? (
                       <div className="details-id">{selectedAppointment.studentId}</div>
                     ) : selectedAppointment.guest ? (
@@ -919,13 +1016,13 @@ useEffect(() => {
                   : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? 'status-done'
                   : selectedAppointment.status === 'cancelled' ? 'status-cancelled'
                   : 'status-declined'
-                }`}>
+                }${isAppointmentOngoing(selectedAppointment) ? ' status-ongoing' : ''}`}>
                     {
-                      selectedAppointment.status === 'confirmed' ? 'Ongoing'
-                      : selectedAppointment.status === 'approved' ? 'Ongoing'
+                      selectedAppointment.status === 'confirmed' ? (isAppointmentOngoing(selectedAppointment) ? 'Ongoing' : 'Rescheduled')
+                      : selectedAppointment.status === 'approved' ? (isAppointmentOngoing(selectedAppointment) ? 'Ongoing' : 'Approved')
                       : selectedAppointment.status === 'pending' ? 'For Approval'
                       : selectedAppointment.status === 'rescheduled' ? 'Rescheduled'
-                      : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? 'Done'
+                      : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? <span className="status-text status-completed">Completed</span>
                       : selectedAppointment.status === 'declined' ? 'Declined'
                       : 'Cancelled'
                     }
@@ -986,13 +1083,16 @@ useEffect(() => {
                       <div style={{color:'#556'}}>{a.start || a.time} {a.end ? ' - ' + a.end : ''} • {a.reason}</div>
                     </div>
                     <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                      <div className={`status-text`} style={{fontWeight:700, color: 
-                        a.status === 'pending' || a.status === 'approved' ? '#0B63B7'
-                        : a.status === 'done' || a.status === 'confirmed' ? '#0E8A32'
+                      <div className={`status-text ${isAppointmentOngoing(a) ? 'status-ongoing' : ''}`} style={{fontWeight:700, color: 
+                        isAppointmentOngoing(a) ? '#D9730D'
+                        : a.status === 'pending' ? '#60A5FA'
+                        : a.status === 'approved' ? '#2FC26A'
+                        : a.status === 'confirmed' ? '#B45309'
+                        : a.status === 'done' ? '#0E8A32'
                         : '#A33131'}}>
                         {a.status === 'pending' ? 'For Approval' 
-                          : a.status === 'approved' ? 'Ongoing'
-                          : a.status === 'confirmed' ? 'Ongoing'
+                          : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
+                          : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
                           : a.status === 'done' ? 'Done'
                           : 'Cancelled'}
                       </div>
@@ -1104,7 +1204,6 @@ useEffect(() => {
                   <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #f1f1f1'}}>
                     <div>
                       <div style={{fontWeight:500}}>{r.start} to {r.end}</div>
-                      {r.date ? <div style={{color:'#888', fontSize:13, marginTop:4}}>{r.date}</div> : null}
                     </div>
                     <div style={{display:'flex', gap:8}}>
                       <button className="close-btn" onClick={() => {
@@ -1126,15 +1225,7 @@ useEffect(() => {
                 ))}
               </div>
 
-              <div style={{display:'flex', gap:12, marginTop:14, alignItems:'flex-end'}}>
-                <div style={{flex:1}}>
-                  <label style={{display:'block', marginBottom:6}}>Date</label>
-                  <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-                  <div style={{color:'#888', fontSize:13, marginTop:6}}>Type — e.g. One-time, Exam, Office hours</div>
-                  <input type="text" placeholder="e.g. One-time, Exam, Office hours" value={newType} onChange={e => setNewType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #f0f0f0', marginTop:6}} />
-                </div>
-
-              </div>
+              
 
               <div style={{display:'flex', gap:12, marginTop:8}}>
                 <div style={{flex:1}}>
@@ -1147,7 +1238,16 @@ useEffect(() => {
                 </div>
               </div>
               <div style={{display:'flex', gap:12, justifyContent:'flex-start', marginTop:12}}>
-                <button className="approve-btn" onClick={addRange}>{editingAvailId || editingAvailIdx !== null ? 'Save' : 'Add'}</button>
+                {(() => {
+                  const maxReached = ((availability[scheduleDay] || []).filter(r => !r.date || r.date === '').length) >= 5
+                  const isEditing = Boolean(editingAvailId || editingAvailIdx !== null)
+                  return (
+                    <>
+                      <button className="approve-btn" onClick={addRange} disabled={!isEditing && maxReached}>{isEditing ? 'Save' : 'Add'}</button>
+                      {!isEditing && scheduleWarning ? <div style={{color:'#d00', marginLeft:8}}>Max 5 time ranges allowed per day</div> : null}
+                    </>
+                  )
+                })()}
                 {editingAvailId || editingAvailIdx !== null ? (
                   <button className="close-btn" onClick={cancelEdit}>Cancel</button>
                 ) : null}

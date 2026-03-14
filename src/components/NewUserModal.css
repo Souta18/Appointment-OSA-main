@@ -8,4 +8,4 @@
 .newuser-error{ color:#a31f1f; background: #fff3f3; padding:8px 10px; border-radius:8px; margin-top:6px; font-weight:700 }
 .newuser-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:8px }
 .btn-cancel{ background:#f3f4f6; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:700 }
-.btn-create{ background: linear-gradient(180deg,#3c72e8,#0b63b7); color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:800 }
+.btn-create{ background: linear-gradient(180deg,#3c72e8,#60A5FA); color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:800 }

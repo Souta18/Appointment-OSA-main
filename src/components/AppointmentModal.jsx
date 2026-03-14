@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import './AppointmentModal.css'
 import { listAvailability } from '../api'
+import Button from './Button'
 
 const APPOINTMENT_REASONS = [
   'Academic Advising',
@@ -22,6 +23,7 @@ export default function AppointmentModal({ onClose, onSubmit }) {
   const [reason, setReason] = useState('')
   const [otherReason, setOtherReason] = useState('')
   const [availability, setAvailability] = useState({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     listAvailability().then(resp => {
@@ -62,11 +64,20 @@ export default function AppointmentModal({ onClose, onSubmit }) {
     setDate(new Date(date.getFullYear(), date.getMonth() + 1))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const submittedReason = reason === 'Other' && otherReason.trim() ? otherReason.trim() : reason
-    onSubmit({ date, time, reason: submittedReason })
-    onClose()
+    if (!onSubmit) return
+    try {
+      setIsSubmitting(true)
+      await onSubmit({ date, time, reason: submittedReason })
+      await new Promise(r => setTimeout(r, 800))
+      onClose()
+    } catch (err) {
+      onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -131,22 +142,10 @@ export default function AppointmentModal({ onClose, onSubmit }) {
                   const wd = weekdayNames[date.getDay()]
                   const ranges = availability[wd] || []
 
-                  const iso = isoLocal(date)
-                  const dateSpecific = ranges.filter(r => r.date && r.date === iso)
-                  const defaultRanges = ranges.filter(r => !r.date || r.date === '')
-                  // debug: log computed availability for this date
-                  try { console.debug('availability for modal', { wd, iso, ranges, dateSpecific, defaultRanges }) } catch (e) {}
-
-                  if (dateSpecific && dateSpecific.length > 0) {
-                    return dateSpecific.map((r, idx) => {
-                      const label = `${r.start} to ${r.end}`
-                      const value = `${r.start}|${r.end}`
-                      return <option key={r.id ?? idx} value={value}>{label}</option>
-                    })
-                  }
-
-                  if (defaultRanges && defaultRanges.length > 0) {
-                    return defaultRanges.map((r, idx) => {
+                  // Show all availability ranges (ignore per-date values)
+                  const allRanges = ranges || []
+                  if (allRanges.length > 0) {
+                    return allRanges.map((r, idx) => {
                       const label = `${r.start} to ${r.end}`
                       const value = `${r.start}|${r.end}`
                       return <option key={r.id ?? idx} value={value}>{label}</option>
@@ -185,12 +184,10 @@ export default function AppointmentModal({ onClose, onSubmit }) {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-blue">
-              Book Appointment
-            </button>
+            <Button type="submit" className="btn-blue" loading={isSubmitting}>Book Appointment</Button>
           </div>
         </form>
       </div>

@@ -57,7 +57,8 @@ class Availability(Base):
     __tablename__ = "availability"
     id = Column(Integer, primary_key=True)
     day = Column(String(20), nullable=False)
-    date = Column(Date, nullable=False)
+    date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
 

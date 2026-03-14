@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import AppointmentModal from '../components/AppointmentModal'
+import Toast from '../components/Toast'
 import './StudentLanding.css'
 import Chatbot from '../components/Chatbot'
 import { createAppointment as apiCreateAppointment, listAppointments as apiListAppointments, getStudentId, updateAppointmentStatus as apiUpdateAppointmentStatus } from '../api'
@@ -13,6 +14,7 @@ export default function StudentLanding() {
   const [showSkeleton, setShowSkeleton] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [confirmMessage, setConfirmMessage] = useState('')
+  const [confirmType, setConfirmType] = useState('success')
   const [notifications, setNotifications] = useState([])
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [pendingCancelId, setPendingCancelId] = useState(null)
@@ -30,6 +32,7 @@ export default function StudentLanding() {
       const until = bans[email]
       if (until && Number(until) > Date.now()) {
         const untilStr = new Date(Number(until)).toLocaleString()
+        setConfirmType('error')
         setShowConfirm(true)
         setConfirmMessage(`Your booking privileges are suspended until ${untilStr}.`) 
         setTimeout(() => setShowConfirm(false), 5000)
@@ -60,6 +63,7 @@ export default function StudentLanding() {
       end = ''
     }
 
+    // normalize time values
     const newAppointment = {
       id: Date.now(),
       date: data.date.toLocaleDateString(),
@@ -74,6 +78,56 @@ export default function StudentLanding() {
       studentId: studentId,
       guest: false
     }
+    
+    // Check for existing/conflicting appointments on the server for the same date and time
+    try {
+      const existingRes = await apiListAppointments()
+      if (existingRes && existingRes.ok) {
+        const existing = existingRes.data || []
+        const toMinutes = (t) => {
+          if (!t) return null
+          const m = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+          if (!m) return null
+          let hh = Number(m[1])
+          const mm = Number(m[2])
+          const ampm = m[3].toUpperCase()
+          if (ampm === 'PM' && hh !== 12) hh += 12
+          if (ampm === 'AM' && hh === 12) hh = 0
+          return hh * 60 + mm
+        }
+
+        const newStartMin = toMinutes(start)
+        const newEndMin = toMinutes(end) || (newStartMin !== null ? newStartMin + 30 : null)
+
+        const conflict = existing.some(a => {
+          if (!a || !(a.iso || a.date)) return false
+          const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+          if (iso !== newAppointment.iso) return false
+          if ((a.status || '').toLowerCase() === 'cancelled') return false
+          const es = a.start || a.start_time || ''
+          const ee = a.end || a.end_time || ''
+          const esMin = toMinutes(es)
+          const eeMin = toMinutes(ee) || (esMin !== null ? esMin + 30 : null)
+          if (esMin === null || newStartMin === null) {
+            // fallback to string-equality check on start time
+            return es && start && es.trim() === start.trim()
+          }
+          // overlapping intervals
+          return !(newEndMin <= esMin || eeMin <= newStartMin)
+        })
+
+        if (conflict) {
+          setConfirmType('error')
+          setShowConfirm(true)
+          setConfirmMessage('An appointment already exists for that date and time. Please choose a different time.')
+          setTimeout(() => setShowConfirm(false), 5000)
+          return
+        }
+      }
+    } catch (e) {
+      // ignore network errors here and proceed optimistically
+    }
+
     const next = [newAppointment, ...appointments]
     setAppointments(next)
     try {
@@ -108,15 +162,18 @@ export default function StudentLanding() {
       // Only refresh from server when creation succeeded; otherwise keep optimistic item
       if (res && res.ok) {
         await loadAppointments()
+        setConfirmType('success')
         setShowConfirm(true)
         setConfirmMessage('Appointment requested successfully!')
         setTimeout(() => setShowConfirm(false), 3000)
       } else {
+        setConfirmType('error')
         setShowConfirm(true)
         setConfirmMessage(res?.error || 'Unable to create appointment. It will remain visible locally until resolved.')
         setTimeout(() => setShowConfirm(false), 5000)
       }
     } catch (e) {
+      setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Unable to create appointment. Please check your connection.')
       setTimeout(() => setShowConfirm(false), 5000)
@@ -154,7 +211,9 @@ export default function StudentLanding() {
       await loadAppointments()
       setShowCancelModal(false)
       setPendingCancelId(null)
+      setConfirmType('success')
       setShowConfirm(true)
+      setConfirmType('error')
       setConfirmMessage('Appointment cancelled')
       setTimeout(() => setShowConfirm(false), 3000)
     })()
@@ -249,6 +308,40 @@ export default function StudentLanding() {
     }
   }
 
+  // helper: convert time like "9:30 AM" to minutes since midnight, or null
+  const toMinutes = (t) => {
+    if (!t) return null
+    const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+    if (!m) return null
+    let hh = Number(m[1])
+    const mm = Number(m[2])
+    const ampm = m[3].toUpperCase()
+    if (ampm === 'PM' && hh !== 12) hh += 12
+    if (ampm === 'AM' && hh === 12) hh = 0
+    return hh * 60 + mm
+  }
+
+  // helper: return true when appointment is currently ongoing (same date and now between start and end)
+  const isAppointmentOngoing = (apt) => {
+    try {
+      if (!apt) return false
+      const iso = apt.iso || (apt.date ? (() => {
+        const d = new Date(apt.date)
+        if (isNaN(d)) return ''
+        return d.toISOString().slice(0,10)
+      })() : '')
+      if (!iso) return false
+      const todayIso = (new Date()).toISOString().slice(0,10)
+      if (iso !== todayIso) return false
+      const startMin = toMinutes(apt.start || apt.time || '')
+      const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
+      if (startMin === null || endMin === null) return false
+      const now = new Date()
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      return nowMin >= startMin && nowMin < endMin
+    } catch (e) { return false }
+  }
+
   useEffect(() => {
     // initial load of appointments
     loadAppointments()
@@ -261,12 +354,7 @@ export default function StudentLanding() {
       <Chatbot />
       <NavBar userType="student" />
       <main className="student-main">
-        {showConfirm && (
-          <div className="confirm-notification">
-            <span className="confirm-icon">✓</span>
-            <span>{confirmMessage}</span>
-          </div>
-        )}
+        <Toast show={showConfirm} type={confirmType} message={confirmMessage} onClose={() => setShowConfirm(false)} />
         {/* Notifications are now available in the navbar dropdown; removed inline notifications bar */}
         <section className="appointments-section">
           <div className="section-header">
@@ -284,7 +372,7 @@ export default function StudentLanding() {
           </div>
           <div className="section-divider" />
           <div className="appointments-content">
-            {appointments.filter(a => a.status === 'pending').length === 0 ? (
+                {appointments.filter(a => (a.status || '').toLowerCase() === 'pending').length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">
                   <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -298,18 +386,21 @@ export default function StudentLanding() {
               </div>
             ) : (
               <div className="appointment-cards">
-                {appointments.filter(a => a.status === 'pending').map(apt => (
-                  <div key={apt.id} className={`appointment-card card-${apt.status}`}>
+                {appointments.filter(a => (a.status || '').toLowerCase() === 'pending').map(apt => {
+                  const s = (apt.status||'').toLowerCase()
+                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
+                  return (
+                  <div key={apt.id} className={`appointment-card card-${cardStatus}`}>
                     <div className="apt-header">
                       <div className="apt-title-section">
                         <div className="apt-title">{apt.reason}</div>
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={`status-text status-${apt.status}`}>
-                          {apt.status === 'pending' ? 'Pending for approval' : apt.status === 'approved' ? 'Approved' : apt.status === 'confirmed' ? 'On Going' : apt.status === 'rescheduled' ? 'Rescheduled' : apt.status === 'declined' ? 'Declined' : apt.status === 'done' ? 'Done' : apt.status === 'cancelled' ? 'Cancelled' : apt.status}
+                        <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                          {((apt.status||'').toLowerCase() === 'pending') ? 'Pending for approval' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : apt.status}
                         </span>
-                        {apt.status === 'pending' && (
+                        {(apt.status||'').toLowerCase() === 'pending' && (
                           <span
                             className="cancel-btn"
                             onClick={() => handleCancel(apt.id)}
@@ -328,14 +419,15 @@ export default function StudentLanding() {
                           <span className="apt-submitted">Submitted on {apt.submittedAt ? (new Date(apt.submittedAt)).toLocaleString([], { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}</span>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
         </section>
         {detailsOpen && selectedAppointment && (
           <div className="details-modal-overlay" onClick={() => setDetailsOpen(false)}>
-            <div className={`details-modal open`} onClick={(e) => e.stopPropagation()}>
+                <div className={`details-modal open`} onClick={(e) => e.stopPropagation()}>
               <div className="details-top">
                 <div className="details-main">
                   {selectedAppointment.name ? (
@@ -344,8 +436,8 @@ export default function StudentLanding() {
                   <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
                   {selectedAppointment.studentId && <div className="details-id">Student ID: {selectedAppointment.studentId}</div>}
                 </div>
-                <div className={`details-status status-text ${selectedAppointment.status === 'cancelled' ? 'status-cancelled' : selectedAppointment.status === 'approved' ? 'status-approved' : selectedAppointment.status === 'pending' ? 'status-pending' : ''}`}>
-                  {selectedAppointment.status === 'cancelled' ? 'Cancelled' : selectedAppointment.status === 'approved' ? 'Approved' : selectedAppointment.status === 'pending' ? 'Pending' : selectedAppointment.status}
+                <div className={`details-status status-text ${((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) ? 'status-ongoing' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'status-approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'status-pending' : '')}`}>
+                  {((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : (isAppointmentOngoing(selectedAppointment) ? 'On Going' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'Approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'Pending' : selectedAppointment.status)}
                 </div>
               </div>
 
@@ -389,7 +481,7 @@ export default function StudentLanding() {
           </div>
           <div className="section-divider" />
           <div className="history-content">
-            {appointments.filter(a => a.status !== 'pending').length === 0 ? (
+            {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon history-icon">
                   <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -401,16 +493,19 @@ export default function StudentLanding() {
               </div>
             ) : (
               <div className="appointment-cards">
-                {appointments.filter(a => a.status !== 'pending').map(apt => (
-                  <div key={apt.id} className={`appointment-card card-${apt.status}`}>
+                {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').map(apt => {
+                  const s = (apt.status||'').toLowerCase()
+                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
+                  return (
+                  <div key={apt.id} className={`appointment-card card-${cardStatus}`}>
                     <div className="apt-header">
                       <div className="apt-title-section">
                         <div className="apt-title">{apt.reason}</div>
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={`status-text status-${apt.status}`}>
-                          {apt.status === 'cancelled' ? 'Cancelled' : apt.status === 'done' ? 'Done' : apt.status === 'approved' ? 'Approved' : apt.status === 'confirmed' ? 'On Going' : apt.status === 'rescheduled' ? 'Rescheduled' : apt.status === 'declined' ? 'Declined' : apt.status}
+                        <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                          {((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : apt.status}
                         </span>
                       </div>
                     </div>
@@ -418,27 +513,28 @@ export default function StudentLanding() {
                       <span className="apt-reason-label">Specific Requirements:</span>
                       <span className="apt-reason-text">{apt.reason}</span>
                     </div>
-                        {apt.status === 'cancelled' && apt.cancelReason && (
+                        {(apt.status||'').toLowerCase() === 'cancelled' && apt.cancelReason && (
                           <div className="apt-cancel-section">
                             <div className="apt-cancel-label">Cancellation reason:</div>
                             <div className="apt-cancel-text">{apt.cancelReason}</div>
                           </div>
                         )}
-                        {apt.status === 'declined' && apt.adminNote && (
+                        {(apt.status||'').toLowerCase() === 'declined' && apt.adminNote && (
                           <div className="apt-cancel-section">
                             <div className="apt-cancel-label">Decline reason:</div>
                             <div className="apt-cancel-text">{apt.adminNote}</div>
                           </div>
                         )}
                     <div className="apt-footer">
-                      {apt.status === 'cancelled' ? (
+                      {(apt.status||'').toLowerCase() === 'cancelled' ? (
                         <span className="apt-submitted">Cancelled at: {apt.cancelledAt ? (new Date(apt.cancelledAt)).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}</span>
                       ) : (
                         <span className="apt-submitted">Submitted on {apt.submittedAt ? (new Date(apt.submittedAt)).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}</span>
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

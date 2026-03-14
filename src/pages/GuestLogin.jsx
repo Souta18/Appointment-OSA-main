@@ -26,7 +26,7 @@ export default function GuestLogin() {
   const [error, setError] = useState('')
   useEffect(() => {
     if (!error) return
-    const id = setTimeout(() => setError(''), 5000)
+    const id = setTimeout(() => setError(''), 3000)
     return () => clearTimeout(id)
   }, [error])
   

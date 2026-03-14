@@ -12,6 +12,7 @@ const FOOTER_LOGOS = [
 
 export default function Landing() {
   const [logoErrors, setLogoErrors] = useState({})
+  const [menuOpen, setMenuOpen] = useState(false)
   const setLogoError = (i) => setLogoErrors((prev) => ({ ...prev, [i]: true }))
 
     // no per-letter split effect — use section reveal + staggered children instead
@@ -84,11 +85,18 @@ export default function Landing() {
             <span className="landing-address">Norzagaray, Bulacan</span>
           </div>
         </div>
-        <div className="landing-nav-links">
-          <a href="#home">Home</a>
-          <a href="#about">About</a>
-          <a href="#services">Services</a>
-          <a href="#contacts">Contacts</a>
+        <button className={`landing-hamburger ${menuOpen ? 'open' : ''}`} aria-label="Toggle menu" onClick={() => setMenuOpen(!menuOpen)}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+            <path d="M4 7H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="line line-1" />
+            <path d="M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="line line-2" />
+            <path d="M4 17H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="line line-3" />
+          </svg>
+        </button>
+        <div className={`landing-nav-links ${menuOpen ? 'open' : ''}`}>
+          <a href="#home" onClick={() => setMenuOpen(false)}>Home</a>
+          <a href="#about" onClick={() => setMenuOpen(false)}>About</a>
+          <a href="#services" onClick={() => setMenuOpen(false)}>Services</a>
+          <a href="#contacts" onClick={() => setMenuOpen(false)}>Contacts</a>
         </div>
         <Link to="/student/login" className="landing-cta">Book Appointment</Link>
       </nav>

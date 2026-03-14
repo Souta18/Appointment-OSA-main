@@ -56,3 +56,21 @@
   color: white;
   background: transparent;
 }
+
+/* Loading state */
+.btn-loading { position: relative; pointer-events: none; opacity: 0.95 }
+.btn-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: rgba(255,255,255,0.95);
+  animation: btn-spin 800ms linear infinite;
+  display: inline-block;
+  margin-right: 8px;
+}
+@keyframes btn-spin { to { transform: rotate(360deg) } }
+
+.btn-loading.btn-secondary .btn-spinner { border: 2px solid rgba(0,0,0,0.12); border-top-color: rgba(0,0,0,0.6) }
+
+.btn-content{ display:inline-flex; align-items:center }

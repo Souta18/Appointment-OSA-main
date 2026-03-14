@@ -162,6 +162,10 @@ def create_app():
             if "date" not in existing:
                 conn.execute(text("ALTER TABLE availability ADD COLUMN `date` DATE NULL"))
                 conn.commit()
+            # add created_at column if missing for monthly reset tracking
+            if "created_at" not in existing:
+                conn.execute(text("ALTER TABLE availability ADD COLUMN `created_at` DATETIME NULL"))
+                conn.commit()
 
     _ensure_availability_date_column()
 
@@ -587,6 +591,16 @@ def create_app():
                 # If this availability has a specific date and it's in the past, skip it (auto-remove from listing)
                 if getattr(r, 'date', None) is not None and r.date < today:
                     continue
+                # Monthly presets (non-date-specific) should reset each month.
+                # If this availability is a generic weekday slot (date is None) and its created_at
+                # is present but from a different month than current, skip it so presets effectively
+                # reset at the start of a new month.
+                if getattr(r, 'date', None) is None and getattr(r, 'created_at', None) is not None:
+                    try:
+                        if r.created_at.month != today.month or r.created_at.year != today.year:
+                            continue
+                    except Exception:
+                        pass
                 days.setdefault(r.day, []).append({
                     "id": r.id,
                     "start": fmt_time(r.start_time),
@@ -719,6 +733,11 @@ def create_app():
                 existing = s.execute(
                     select(Availability).where(Availability.day == day)
                 ).scalars().all()
+                # Enforce maximum of 5 generic (non-date-specific) availability ranges per weekday
+                if parsed_date is None:
+                    generic_existing = [slot for slot in existing if getattr(slot, 'date', None) is None]
+                    if len(generic_existing) >= 5:
+                        return error_response("Maximum of 5 time ranges allowed per day", 400)
                 
                 for slot in existing:
                     # Check for overlap
@@ -728,6 +747,11 @@ def create_app():
                 a = Availability(day=day, start_time=st, end_time=et)
                 if parsed_date is not None:
                     a.date = parsed_date
+                # record when this availability was created so monthly presets can be reset
+                try:
+                    a.created_at = datetime.utcnow()
+                except Exception:
+                    pass
                 s.add(a)
                 s.flush()
                 s.commit()
@@ -849,6 +873,8 @@ def create_app():
                     out.append({
                         "id": r.id,
                         "name": full_name or "",
+                        "course": (stu.course if stu else "") or "",
+                        "department": (stu.course if stu else "") or "",
                         "firstName": (stu.first_name if stu else "") or "",
                         "middleName": (stu.middle_name if stu else "") or "",
                         "lastName": (stu.last_name if stu else "") or "",
@@ -979,6 +1005,13 @@ def create_app():
                     if not guest:
                         return error_response(f"Guest with ID {guest_id} not found", 404)
                 
+                # Enforce maximum appointments per day (admin policy): max 5 per day
+                daily_count = s.execute(
+                    select(Appointment).where((Appointment.date == dt_date) & (Appointment.status != "cancelled"))
+                ).scalars().all()
+                if len(daily_count) >= 5:
+                    return error_response("Maximum number of appointments reached for this date", 400)
+
                 # Check for appointment conflicts
                 conflicts = s.execute(
                     select(Appointment).where(

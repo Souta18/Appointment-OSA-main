@@ -187,12 +187,13 @@
 /* status indicator dots under each day */
 .day-indicators{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); display:flex; gap:8px }
 .dot{ width:10px; height:10px; border-radius:50%; box-shadow: 0 4px 8px rgba(2,6,23,0.12) }
-.dot-confirmed{ background:#2FC26A }
+.dot-confirmed{ background:#FBBF24 }
 .dot-pending{ background:#2EA8F0 }
 .dot-cancelled{ background:#E06B6B }
 .dot-declined{ background:#F6B26B }
 .dot-done{ background:#2FC26A }
-.dot-approved{ background:#2EA8F0 }
+.dot-completed{ background:#2FC26A }
+.dot-approved{ background:#2FC26A }
 
 /* Sidebar / appointment list */
 .admin-sidebar{ display:flex; flex-direction:column; gap:16px; background:#fff; padding:24px; border-radius:18px; box-shadow: var(--shadow-card) }
@@ -212,16 +213,19 @@
 }
 .sidebar-link:hover{ background: rgba(11,99,183,0.12); box-shadow: 0 8px 20px rgba(11,99,183,0.06) }
 
+.set-dated-btn{ background: #fff; border: 1px solid rgba(11,99,183,0.12); color: #0B63B7; padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer }
+.set-dated-btn:hover{ background: rgba(11,99,183,0.06) }
+
 .sidebar-card{
   position:relative;
   display:flex;
   align-items:flex-start;
   gap:20px;
-  padding:28px 36px 84px; /* more bottom padding for long text */
+  padding:32px 40px 64px; /* larger padding so text fits */
   border-radius:18px;
   box-shadow: 0 18px 48px rgba(2,6,23,0.10);
   overflow:hidden;
-  min-height:220px; /* increased for more breathing room */
+  min-height:260px; /* larger card to avoid text cutoff */
   background: linear-gradient(180deg, #EAF6FA 0%, #E1F0F4 100%);
   color: #0f172a;
 }
@@ -229,23 +233,25 @@
 /* Ongoing (confirmed) -> orange */
 .sidebar-card.status-confirmed{ background: #FFF4EA }
 .sidebar-card.status-pending{ background: #E6F4FB }
-.sidebar-card.status-approved{ background: linear-gradient(180deg,#E9FFEE,#CFF8D6); color: #0E8A32 }
+.sidebar-card.status-approved{ background: linear-gradient(180deg,#E9FFEE 0%, #CFF8D6 100%); color: #0E662E }
 .sidebar-card.status-cancelled{ background: linear-gradient(180deg,#FFF1F2,#FDE6E6); color:#6b2a2a }
 .sidebar-card.status-pending{ background: linear-gradient(180deg,#E6F7FF,#D6F0FF); color:#083a66 }
 .sidebar-card.status-declined{ background: #FFF0F0 }
 /* Done -> green */
 .sidebar-card.status-done{ background: #E8FCEC }
-/* Rescheduled -> orange */
-.sidebar-card.status-rescheduled{ background: #FFF6ED }
+/* Rescheduled / Confirmed -> yellow */
+.sidebar-card.status-rescheduled{ background: #FFFBEB }
+.sidebar-card.status-confirmed{ background: #FFFBEB }
 
-.sidebar-card.status-rescheduled .sidebar-card-icon{ background: #FF9833; color:#fff }
-.sidebar-card-status.status-rescheduled{ background: rgba(255,152,51,0.12); color: #D9730D }
+.sidebar-card.status-rescheduled .sidebar-card-icon, .sidebar-card.status-confirmed .sidebar-card-icon{ background: #FBBF24; color:#fff }
+.sidebar-card-status.status-rescheduled{ background: rgba(251,191,36,0.12); color: #B45309 }
+.sidebar-card-status.status-confirmed{ background: rgba(251,191,36,0.12); color: #B45309 }
 
 
 .sidebar-card-left { display:flex; flex-direction:column; align-items:center; gap:8px; min-width:90px }
 .sidebar-card-left .sidebar-card-icon{ width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow: 0 6px 12px rgba(2,6,23,0.06) }
 /* icon colors: confirmed -> orange, done -> green */
-.sidebar-card.status-confirmed .sidebar-card-icon{ background: #FF9833; color:#fff }
+.sidebar-card.status-confirmed .sidebar-card-icon{ background: #FBBF24; color:#fff }
 .sidebar-card.status-pending .sidebar-card-icon{ background: #5fbcf3; color:#fff }
 .sidebar-card.status-approved .sidebar-card-icon{ background: #2FC26A; color:#fff }
 .sidebar-card.status-cancelled .sidebar-card-icon{ background: #E06B6B; color:#fff }
@@ -298,9 +304,9 @@
   box-shadow: 0 8px 20px rgba(2,6,23,0.06);
   background: rgba(255,255,255,0.85);
 }
-.sidebar-card-status.status-confirmed{ background: rgba(255,152,51,0.12); color: #D9730D }
+.sidebar-card-status.status-confirmed{ background: rgba(251,191,36,0.12); color: #B45309 }
 .sidebar-card-status.status-pending{ background: linear-gradient(180deg,#9EE3FF,#2FA8E6); color: #fff; box-shadow: 0 8px 20px rgba(47,163,230,0.12); }
-.sidebar-card-status.status-approved{ background: linear-gradient(180deg,#9CEB98,#2FC26A); color: #fff; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
+.sidebar-card-status.status-approved{ background: linear-gradient(180deg,#9CEB98 0%, #2FC26A 100%); color: #fff; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
 .sidebar-card-status.status-cancelled{ background: linear-gradient(180deg,#FF7B86,#C41E3A); color: #fff; box-shadow: 0 8px 20px rgba(196,30,58,0.12); }
 .sidebar-card-status.status-done{ background: rgba(47,194,106,0.08); color: #0E8A32 }
 
@@ -308,8 +314,8 @@
 .sidebar-card{
   position: relative;
   transition: transform 220ms cubic-bezier(.2,.9,.2,1), box-shadow 220ms cubic-bezier(.2,.9,.2,1), border-radius 180ms;
-  padding: 20px 28px 40px; /* extra bottom padding so "View Details" sits lower */
-  min-height: 140px; /* increase card size */
+  padding: 32px 40px 64px; /* larger padding so text fits */
+  min-height: 260px; /* increase card size */
 }
 .sidebar-card:hover{
   transform: translateY(-10px) scale(1.01);
@@ -320,7 +326,7 @@
 .sidebar-card:hover .sidebar-card-status{
   transform: translateY(-2px);
 }
-.sidebar-card-status.status-confirmed{ color:#D9730D }
+.sidebar-card-status.status-confirmed{ color:#B45309 }
 .sidebar-card-status.status-pending{ color:#fff }
 .sidebar-card-status.status-cancelled{ color:#fff }
 .sidebar-card-status.status-done{ color:#0E8A32 }
@@ -337,9 +343,11 @@
 }
 
 /* Colored text for common statuses when using status-text */
-.status-text.status-pending { color: #0B63B7 !important; }
-.status-text.status-approved { color: #2F9B4F !important; }
+.status-text.status-pending { color: #60A5FA !important; }
+.status-text.status-approved { color: #2FC26A !important; }
+.status-text.status-ongoing { color: #D9730D !important; }
 .status-text.status-cancelled { color: #A33131 !important; }
+.status-text.status-rescheduled { color: #B45309 !important; }
 
 /* Ensure modal/details and sidebar top-right status use plain text when .status-text is present */
 .sidebar-card-status.status-pending.status-text,
@@ -366,18 +374,19 @@
 
 /* Details modal */
 .details-modal-overlay{ position:fixed; inset:0; background: rgba(2,6,23,0.45); display:flex; align-items:center; justify-content:center; z-index:60 }
-.details-modal{ background:#fff; border-radius:14px; padding:28px; width:760px; max-width:92%; box-shadow: 0 30px 60px rgba(2,6,23,0.2); color:var(--text-dark) }
+.details-modal{ background:#fff; border-radius:14px; padding:28px; width:900px; max-width:96%; box-shadow: 0 30px 60px rgba(2,6,23,0.2); color:var(--text-dark) }
 .details-modal h2{ margin:0; font-size:32px }
 .details-modal h3{ margin:0 }
 .done-btn{ background: linear-gradient(180deg,#9CEB98,#2FC26A); border:none; color:#064; padding:14px 34px; border-radius:22px; font-weight:700; box-shadow: 0 14px 30px rgba(47,163,85,0.18); cursor:pointer; font-size:16px }
 .done-btn:active{ transform:translateY(1px) }
 
 /* status colors for modal badge */
-.details-modal .status-pending{ color:#0B63B7 }
-.details-modal .status-confirmed{ color:#D9730D }
+.details-modal .status-pending{ color:#60A5FA }
+.details-modal .status-ongoing{ color:#D9730D }
+.details-modal .status-confirmed{ color:#B45309 }
 .details-modal .status-done{ color:#0E8A32 }
 .details-modal .status-cancelled{ color:#A33131 }
-.details-modal .status-approved{ color:#1d4ed8 }
+.details-modal .status-approved{ color:#2FC26A }
 
 /* slide down animation */
 @keyframes slideDown {
@@ -394,11 +403,12 @@
 .details-id{ margin-top:6px; color:#2b5978; font-weight:700 }
 
 .details-status{ position:absolute; right:0; top:0; font-weight:800; color:#0B63B7 }
-.details-status.status-confirmed{ color:#D9730D }
+.details-status.status-confirmed{ color:#B45309 }
 .details-status.status-done{ color:#0E8A32 }
 .details-status.status-pending{ color:#fff; background: linear-gradient(180deg,#9EE3FF,#2FA8E6); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(47,163,230,0.12); }
 .details-status.status-cancelled{ color:#fff; background: linear-gradient(180deg,#FF7B86,#C41E3A); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(196,30,58,0.12); }
-.details-status.status-approved{ color:#fff; background: linear-gradient(180deg,#9CEB98,#2FC26A); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
+.details-status.status-approved{ color:#fff; background: linear-gradient(180deg,#9CEB98 0%, #2FC26A 100%); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(47,163,85,0.12) }
+.details-status.status-ongoing{ color:#fff; background: linear-gradient(180deg,#FFDDB8,#FF9833); padding:6px 12px; border-radius:999px; box-shadow: 0 8px 20px rgba(255,152,51,0.12) }
 
 /* Force plain-text color and remove pill background when status should display as text */
 .details-status.status-pending.status-text,
@@ -425,6 +435,21 @@
 .status-badge.status-cancelled.status-text,
 .status-text.status-cancelled {
   color: #A33131 !important;
+}
+
+/* Completed letter badge */
+.status-completed-letter{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  background: #2FC26A;
+  color: #064;
+  font-weight:800;
+  font-size:18px;
+  box-shadow: 0 8px 20px rgba(47,194,106,0.12);
 }
 
 .details-section{ margin-top:22px }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './WalkInModal.css'
+import Button from './Button'
 
 const REASONS = [
   'Academic Advising',
@@ -18,6 +19,7 @@ export default function WalkInModal({ onClose, onSubmit }) {
   const [email, setEmail] = useState('')
   const [reason, setReason] = useState('')
   const [otherReason, setOtherReason] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const today = new Date()
   const defaultDate = today.toISOString().slice(0,10)
   const pad = (n) => String(n).padStart(2,'0')
@@ -25,11 +27,23 @@ export default function WalkInModal({ onClose, onSubmit }) {
   const [date, setDate] = useState(defaultDate)
   const [time, setTime] = useState(defaultTime)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const submittedReason = reason === 'Other' && otherReason.trim() ? otherReason.trim() : reason
-    onSubmit && onSubmit({ fullName, role, studentNumber: role === 'Student' ? studentNumber : '', email, reason: submittedReason, date, time })
-    onClose && onClose()
+    if (!onSubmit) return
+    try {
+      setIsSubmitting(true)
+      // allow parent to return a promise
+      await onSubmit({ fullName, role, studentNumber: role === 'Student' ? studentNumber : '', email, reason: submittedReason, date, time })
+      // small delay so user sees loader
+      await new Promise(r => setTimeout(r, 800))
+      onClose && onClose()
+    } catch (e) {
+      // still close after error to keep UX simple; parent should show error toast
+      onClose && onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -114,8 +128,8 @@ export default function WalkInModal({ onClose, onSubmit }) {
           </label>
 
           <div className="walkin-actions full">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Book appointment</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+            <Button type="submit" className="w-auto" loading={isSubmitting}>Book appointment</Button>
           </div>
         </form>
       </div>

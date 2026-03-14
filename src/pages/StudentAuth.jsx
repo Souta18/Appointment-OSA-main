@@ -51,7 +51,7 @@ export default function StudentAuth() {
     if (loginTimer.current) clearTimeout(loginTimer.current)
     setLoginError(msg)
     if (msg) {
-      loginTimer.current = setTimeout(() => setLoginError(''), 4000)
+      loginTimer.current = setTimeout(() => setLoginError(''), 3000)
     }
   }
 
@@ -59,7 +59,7 @@ export default function StudentAuth() {
     if (signupTimer.current) clearTimeout(signupTimer.current)
     setSignupError(msg)
     if (msg) {
-      signupTimer.current = setTimeout(() => setSignupError(''), 4000)
+      signupTimer.current = setTimeout(() => setSignupError(''), 3000)
     }
   }
 
@@ -70,6 +70,24 @@ export default function StudentAuth() {
     setToast(msg)
     toastTimer.current = setTimeout(() => setToast(''), ms)
   }
+
+  // Ensure form fields are cleared when component mounts or when view changes
+  useEffect(() => {
+    setLoginForm({ studentId: '', password: '' })
+    setSignupForm({
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      studentNumber: '',
+      email: '',
+      contact: '',
+      course: '',
+      password: ''
+    })
+    setForgotStudentNumber('')
+    // clear any transient session flags that might prefill UI
+    try { sessionStorage.removeItem('postLoginSkeleton') } catch (e) {}
+  }, [validView])
 
   function handleSignupChange(field, value) {
     // clear visible signup error while user types
@@ -131,6 +149,7 @@ export default function StudentAuth() {
     e.preventDefault()
     setSignupError('')
     setLoginError('')
+    setIsSubmitting(true)
     // Basic client-side validation
     const first = (signupForm.firstName || '').trim()
     const middle = (signupForm.middleName || '').trim()
@@ -183,7 +202,12 @@ export default function StudentAuth() {
       ...signupForm,
       name: fullName
     }
-    const res = await studentSignup(payload)
+    let res
+    try {
+      res = await studentSignup(payload)
+    } finally {
+      setIsSubmitting(false)
+    }
     if (res?.ok) {
       const combinedName =
         (res.student.name || '').trim() ||
@@ -256,7 +280,7 @@ export default function StudentAuth() {
                   <button type="button" className="auth-link link-button" onClick={() => setView(VIEWS.forgot)}>
                     Forgot Password?
                   </button>
-                  <Button type="submit" className="w-full">Sign In</Button>
+                  <Button type="submit" className="w-full" loading={isSubmitting}>Sign In</Button>
                 </div>
               </form>
               <p className="auth-footer">
@@ -350,7 +374,7 @@ export default function StudentAuth() {
                   </div>
                 </div>
                 {signupError && <div className="auth-error-submit">{signupError}</div>}
-                <Button type="submit" className="w-full">Sign up</Button>
+                <Button type="submit" className="w-full" loading={isSubmitting}>Sign up</Button>
               </form>
               <p className="auth-footer">
                 Already have an account? <button type="button" className="link-button" onClick={() => setView(VIEWS.login)}>Sign in</button>

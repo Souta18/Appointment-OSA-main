@@ -48,6 +48,36 @@
   color: var(--success);
 }
 
+/* Error variant (red) */
+.confirm-notification.error {
+  background: #FFF6F6;
+}
+
+.confirm-notification.error .confirm-icon {
+  background: #FDE6E6 !important;
+  border: 1px solid #C41E3A !important;
+  color: #C41E3A !important;
+}
+
+.confirm-notification.error span:last-child {
+  color: #C41E3A !important;
+}
+
+/* Explicit success variant to avoid accidental inheritance */
+.confirm-notification.success {
+  background: #F3FFF6;
+}
+
+.confirm-notification.success .confirm-icon {
+  background: #EAF9EF !important;
+  border: 1px solid #2FC26A !important;
+  color: #2FC26A !important;
+}
+
+.confirm-notification.success span:last-child {
+  color: #2FC26A !important;
+}
+
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
@@ -423,7 +453,7 @@
 }
 
 /* Specific colors for text statuses */
-.status-text.status-pending { color: #0B63B7; }
+.status-text.status-pending { color: #60A5FA; }
 .status-text.status-cancelled { color: #A33131; }
 
 /* Ensure modal/details also show colored plain text */
@@ -434,7 +464,8 @@
   padding: 0 !important;
   color: inherit !important;
 }
-.status-text.status-approved { color: #2F9B4F; }
+.status-text.status-approved { color: #2FC26A; }
+.status-text.status-ongoing { color: #D9730D; }
 
 /* Override modal/details boxed styles so modal shows plain text too */
 .details-status.status-cancelled,
@@ -472,3 +503,96 @@
     left: 1rem;
   }
 }
+
+/* Student-landing specific: make modal status badges colored (overrides admin styles) */
+.student-landing .details-modal {
+  color: var(--text-dark);
+}
+.student-landing .details-modal .details-status {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+  background: transparent;
+  color: inherit;
+}
+.student-landing .details-modal .details-status.status-approved {
+  background: linear-gradient(180deg, #9CEB98 0%, #2FC26A 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 26px rgba(47,163,85,0.12);
+}
+.student-landing .details-modal .details-status.status-pending {
+  background: linear-gradient(180deg, #D6EEFF 0%, #A6D9FF 100%);
+  color: #003E7E;
+}
+.student-landing .details-modal .details-status.status-ongoing {
+  background: linear-gradient(180deg, #FFE6C8 0%, #FFB76B 100%);
+  color: #7A3700;
+  box-shadow: 0 10px 26px rgba(217,120,20,0.12);
+}
+.student-landing .details-modal .details-status.status-cancelled {
+  background: linear-gradient(180deg, #FFD6D9 0%, #FF9EA6 100%);
+  color: #7A1F1F;
+}
+.student-landing .details-modal .details-status.status-completed,
+.student-landing .details-modal .details-status.status-done {
+  background: linear-gradient(180deg, #DFF4E4 0%, #B6E6C2 100%);
+  color: #0E8A32;
+}
+
+/* Ensure plain text status used elsewhere on student page also reflects approved color */
+.student-landing .status-text.status-approved { color: #2FC26A !important; }
+
+/* Student landing: card background per status (overrides global/admin styles) */
+.student-landing .card-approved {
+  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%) !important;
+  color: #0E662E !important;
+  box-shadow: 0 12px 28px rgba(47,163,85,0.06) !important;
+  border-radius: 15px;
+}
+.student-landing .card-pending {
+  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%) !important;
+  color: #083a66 !important;
+  box-shadow: 0 12px 28px rgba(11,99,183,0.04) !important;
+}
+.student-landing .card-cancelled {
+  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%) !important;
+  color: #7A1F1F !important;
+  box-shadow: 0 12px 28px rgba(196,30,58,0.04) !important;
+}
+.student-landing .card-completed,
+.student-landing .card-done {
+  background: linear-gradient(180deg, #CFF8D6 0%, #8EDB8C 100%) !important;
+  color: #0E8A32 !important;
+  box-shadow: 0 12px 28px rgba(14,138,50,0.06) !important;
+}
+
+/* Rescheduled (use same visual as admin: soft yellow) */
+.student-landing .card-rescheduled {
+  background: #FFFBEB !important;
+  color: #7A4A12 !important;
+  box-shadow: 0 12px 28px rgba(186,134,0,0.04) !important;
+  border-radius: 15px;
+}
+
+/* Status text color for rescheduled */
+.student-landing .status-text.status-rescheduled { color: #B45309 !important; }
+
+/* Details modal badge for rescheduled */
+.student-landing .details-modal .details-status.status-rescheduled {
+  background: rgba(251,191,36,0.12);
+  color: #B45309;
+  padding: 0.45rem 0.9rem;
+  border-radius: 12px;
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+}
+
+/* Ensure status text colors on student page match requested colors */
+.student-landing .status-text.status-pending { color: #60A5FA !important; }
+.student-landing .status-text.status-approved { color: #2FC26A !important; }
+.student-landing .status-text.status-completed,
+.student-landing .status-text.status-done { color: #0E8A32 !important; }
+.student-landing .status-text.status-cancelled { color: #A33131 !important; }

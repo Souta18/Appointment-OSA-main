@@ -88,6 +88,14 @@ html { scroll-behavior: smooth; }
   gap: 2rem;
 }
 
+/* Hamburger (mobile) */
+.landing-hamburger{ display:none; background:transparent; border:none; cursor:pointer; color:var(--text-dark); padding:8px; border-radius:8px }
+.landing-hamburger svg{ display:block }
+.landing-hamburger .line{ transition: transform 240ms ease, opacity 200ms ease }
+.landing-hamburger.open .line-1{ transform: translateY(5px) rotate(45deg) }
+.landing-hamburger.open .line-2{ opacity:0 }
+.landing-hamburger.open .line-3{ transform: translateY(-5px) rotate(-45deg) }
+
 .landing-nav-links a {
   font-family: var(--font-inter);
   font-weight: 700;
@@ -788,12 +796,36 @@ html { scroll-behavior: smooth; }
     padding-top: 140px;
   }
   .landing-nav {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 1rem;
+    flex-direction: row;
+    align-items: center;
+    padding: 0.75rem 1rem;
   }
   .landing-hero {
-    padding: 60px 24px;
-    min-height: 400px;
+    padding: 48px 16px;
+    min-height: 420px;
   }
+  .landing-hamburger{ display:inline-flex; margin-left:12px }
+  .landing-nav-links{ display:none; position:absolute; top:72px; left:12px; right:12px; background: rgba(255,255,255,0.98); padding:12px 18px; border-radius:12px; box-shadow:0 10px 30px rgba(2,6,23,0.12); flex-direction:column; gap:12px }
+  .landing-nav-links a{ color:var(--text-dark); font-size:16px }
+  .landing-nav-links.open{ display:flex }
+  .landing-cta{ display:inline-block; padding:8px 14px; font-size:14px }
+
+  /* Reduce header logo and title sizes on small screens but keep text visible */
+  .landing-logo-osa,
+  .landing-logo-nc {
+    width: 40px;
+    height: 40px;
+  }
+  .landing-labels { display:block; margin-left:8px }
+  .landing-label { font-size:11px }
+  .landing-title { font-size:16px; font-weight:700 }
+  .landing-address { font-size:10px }
+
+  /* Footer logo smaller on mobile */
+  .footer-logos { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .footer-logo-item { width: 44px; height: 44px; }
+
+  /* Make hero content tighter on small screens */
+  .landing-hero h1 { font-size: clamp(22px, 6vw, 34px); max-width: 100%; }
+  .landing-hero p { font-size: 14px; max-width: 90%; }
 }
