@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
+import { createAppointment as apiCreateAppointment } from '../api'
 import './GuestBooking.css'
 
 const APPOINTMENT_REASONS = [
@@ -22,8 +23,19 @@ export default function GuestBooking() {
   const location = useLocation()
   const guestInfo = location.state || {}
 
-  // Require guest info first; redirect if accessed directly
-  if (!location.state) {
+  // Accept guest info either via navigation state or from localStorage (so refresh doesn't drop access)
+  const storedGuestName = (typeof window !== 'undefined') ? (localStorage.getItem('guestName') || '') : ''
+  const storedGuestEmail = (typeof window !== 'undefined') ? (localStorage.getItem('guestEmail') || '') : ''
+
+  // Build effective guest info
+  const effectiveGuestInfo = location.state || ((storedGuestName || storedGuestEmail) ? {
+    firstName: storedGuestName ? storedGuestName.split(' ')[0] : '',
+    lastName: storedGuestName ? storedGuestName.split(' ').slice(1).join(' ') : '',
+    email: storedGuestEmail || ''
+  } : null)
+
+  // Require guest info first; redirect if accessed directly without any stored state
+  if (!effectiveGuestInfo) {
     navigate('/guest/login', { replace: true })
     return null
   }
@@ -111,8 +123,35 @@ export default function GuestBooking() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    // In a real app, submit guest appointment with guestInfo + { date, time, reason }
-    navigate('/', { state: { guestBooked: true } })
+    ;(async () => {
+      try {
+        const guestName = (effectiveGuestInfo && ((effectiveGuestInfo.firstName || '') + ' ' + (effectiveGuestInfo.lastName || '')) ) || storedGuestName || ''
+        const guestEmail = (effectiveGuestInfo && (effectiveGuestInfo.email || '')) || storedGuestEmail || ''
+        const iso = date.toISOString().slice(0,10)
+        const start = time || ''
+        const payload = {
+          name: guestName,
+          email: guestEmail,
+          reason: reason,
+          iso: iso,
+          start: start,
+          status: 'pending',
+          guest: true
+        }
+
+        const res = await apiCreateAppointment(payload)
+        if (res && res.ok) {
+          // navigate to guest dashboard or show confirmation
+          navigate('/guest/dashboard', { state: { message: 'Appointment requested successfully' } })
+        } else {
+          // show error message inline
+          const msg = (res && res.error) || 'Unable to create appointment. Please try again.'
+          setSlotsMessage(msg)
+        }
+      } catch (e) {
+        setSlotsMessage('Unable to create appointment. Please check your connection.')
+      }
+    })()
   }
 
   return (

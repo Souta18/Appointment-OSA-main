@@ -17,12 +17,15 @@ export default function AdminLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    const start = Date.now()
     setIsSubmitting(true)
     let res
     try {
       res = await adminLogin(username, password)
     } finally {
-      setIsSubmitting(false)
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      setTimeout(() => setIsSubmitting(false), remaining)
     }
     if (res?.ok) {
       try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
@@ -9,6 +9,8 @@ import { guestLogin, guestSignup } from '../api'
 
 export default function GuestLogin() {
   const navigate = useNavigate()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const loadingTimer = useRef(null)
   const [view, setView] = useState('signin') // 'signin' or 'signup'
   const [signInForm, setSignInForm] = useState({ username: '', password: '' })
   const [signUpForm, setSignUpForm] = useState({ firstName: '', middleName: '', lastName: '', email: '', contact: '', password: '' })
@@ -29,6 +31,12 @@ export default function GuestLogin() {
     const id = setTimeout(() => setError(''), 3000)
     return () => clearTimeout(id)
   }, [error])
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+    }
+  }, [])
   
     // Map API error strings to friendlier guest-specific messages
     const mapGuestError = (err, context = 'general') => {
@@ -53,6 +61,8 @@ export default function GuestLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    const start = Date.now()
+    setIsSubmitting(true)
     if (view === 'signup') {
       const fullName = `${signUpForm.firstName || ''}${signUpForm.middleName ? ' ' + signUpForm.middleName : ''}${signUpForm.lastName ? ' ' + signUpForm.lastName : ''}`.trim()
       const payload = {
@@ -64,14 +74,25 @@ export default function GuestLogin() {
       const res = await guestSignup(payload)
       if (res?.ok) {
         try {
-          localStorage.setItem('guestName', res.guest.name)
-          localStorage.setItem('guestEmail', res.guest.email)
-          localStorage.setItem('guestUsername', res.guest.username)
+            localStorage.setItem('guestName', res.guest.name)
+            localStorage.setItem('guestEmail', res.guest.email)
+            localStorage.setItem('guestUsername', res.guest.username)
+            if (res.guest.id) localStorage.setItem('guestId', String(res.guest.id))
         } catch (e) {}
-        navigate('/guest/booking', { state: signUpForm })
+          // After signup, go directly to guest dashboard
+          navigate('/guest/dashboard', { state: { name: res.guest.name, guestId: res.guest.id } })
+        // ensure loading shows at least 2s
+        const elapsed = Date.now() - start
+        const remaining = Math.max(0, 2000 - elapsed)
+        if (loadingTimer.current) clearTimeout(loadingTimer.current)
+        loadingTimer.current = setTimeout(() => setIsSubmitting(false), remaining)
         return
       } else {
         setError(mapGuestError(res?.error, 'signup'))
+        const elapsed = Date.now() - start
+        const remaining = Math.max(0, 2000 - elapsed)
+        if (loadingTimer.current) clearTimeout(loadingTimer.current)
+        loadingTimer.current = setTimeout(() => setIsSubmitting(false), remaining)
         return
       }
     }
@@ -83,8 +104,16 @@ export default function GuestLogin() {
         localStorage.setItem('guestUsername', res.guest.username)
       } catch (e) {}
       navigate('/guest/dashboard', { state: { name: res.guest.name } })
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+      loadingTimer.current = setTimeout(() => setIsSubmitting(false), remaining)
     } else {
       setError(mapGuestError(res?.error, 'login'))
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+      loadingTimer.current = setTimeout(() => setIsSubmitting(false), remaining)
     }
   }
 
@@ -106,7 +135,7 @@ export default function GuestLogin() {
               {error && <div className="auth-error">{error}</div>}
               <div className="guest-buttons">
                 <Button type="button" variant="secondary" onClick={() => navigate('/student/login')}>Back</Button>
-                <Button type="submit" variant="primary">Sign In</Button>
+                <Button type="submit" variant="primary" loading={isSubmitting}>Sign In</Button>
               </div>
             </form>
           </>
@@ -140,7 +169,7 @@ export default function GuestLogin() {
               {error && <div className="auth-error">{error}</div>}
               <div className="guest-buttons">
                 <Button type="button" variant="secondary" onClick={() => { setView('signin'); setError('') }}>Have an account?</Button>
-                <Button type="submit" variant="primary">Sign up</Button>
+                <Button type="submit" variant="primary" loading={isSubmitting}>Sign up</Button>
               </div>
             </form>
           </>

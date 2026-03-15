@@ -12,7 +12,6 @@ export default function AdminWalkIn() {
   const [guestFirst, setGuestFirst] = useState('')
   const [guestLast, setGuestLast] = useState('')
   const [guestContact, setGuestContact] = useState('')
-  const [guestVisitorType, setGuestVisitorType] = useState('')
   const [guestReason, setGuestReason] = useState('')
   const [guestOther, setGuestOther] = useState('')
   const [studentMessage, setStudentMessage] = useState('')
@@ -57,7 +56,6 @@ export default function AdminWalkIn() {
         studentId: '',
         guest: true,
         contact: guestContact || '',
-        visitorType: guestVisitorType || '',
         reason: guestReason === 'Other' && guestOther ? guestOther : (guestReason || 'Walk-in'),
         date: now.toLocaleDateString(),
         iso: now.toISOString().slice(0,10),
@@ -69,7 +67,6 @@ export default function AdminWalkIn() {
       setGuestMessage('Walk-in added successfully')
       setTimeout(() => setGuestMessage(''), 3000)
       setGuestFirst(''); setGuestLast(''); setGuestContact('')
-      setGuestVisitorType('')
     } catch (e) { console.error(e); setGuestMessage('Failed to add walk-in') }
   }
 
@@ -111,13 +108,7 @@ export default function AdminWalkIn() {
 
               <form className="form-card guest-card" onSubmit={submitGuestWalkIn}>
                 <h3 className="card-title">Walk-In Registration</h3>
-                <label className="form-label">Visitor Type</label>
-                <select className="form-input" value={guestVisitorType} onChange={e => setGuestVisitorType(e.target.value)}>
-                  <option value="">Select Visitor Type</option>
-                  <option>Teaching Personnel</option>
-                  <option>Alumni</option>
-                  <option>Visitor</option>
-                </select>
+                {/* Visitor type removed: only Guest walk-in supported */}
                 <Input label="First Name" placeholder="e.g. Juan" value={guestFirst} onChange={e => setGuestFirst(e.target.value)} required />
                 <Input label="Last Name" placeholder="e.g. Dela Cruz" value={guestLast} onChange={e => setGuestLast(e.target.value)} required />
                 <label className="form-label">Reason for Appointment</label>

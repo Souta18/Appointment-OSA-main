@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
@@ -22,6 +22,13 @@ export default function StudentSignup() {
   })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const loadingTimer = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+    }
+  }, [])
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -94,6 +101,7 @@ export default function StudentSignup() {
       return
     }
 
+    const start = Date.now()
     setIsLoading(true)
     try {
       // Send signup data to backend
@@ -128,7 +136,13 @@ export default function StudentSignup() {
       }
       console.error(err)
     } finally {
-      setIsLoading(false)
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      if (loadingTimer.current) clearTimeout(loadingTimer.current)
+      loadingTimer.current = setTimeout(() => {
+        setIsLoading(false)
+        loadingTimer.current = null
+      }, remaining)
     }
   }
 
