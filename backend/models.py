@@ -45,14 +45,6 @@ class GuestAccount(Base):
     
     appointments = relationship("Appointment", back_populates="guest")
 
-class Guest(Base):
-    __tablename__ = "guests"
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(100))
-    contact = Column(String(20))
-    created_at = Column(DateTime, default=datetime.utcnow)
-
 class Availability(Base):
     __tablename__ = "availability"
     id = Column(Integer, primary_key=True)

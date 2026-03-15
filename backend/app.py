@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from sqlalchemy import select, text
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime, time, date
 import os
 import base64
@@ -13,11 +15,11 @@ from functools import wraps
 try:
     from . import config
     from .db import Base, init_engine_and_session
-    from .models import Appointment, Admin, Availability, Student, Guest, GuestAccount
+    from .models import Appointment, Admin, Availability, Student, GuestAccount
 except Exception:  # pragma: no cover
     import config  # type: ignore
     from db import Base, init_engine_and_session  # type: ignore
-    from models import Appointment, Admin, Availability, Student, Guest, GuestAccount  # type: ignore
+    from models import Appointment, Admin, Availability, Student, GuestAccount  # type: ignore
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -100,8 +102,24 @@ def require_admin_token(f):
 def create_app():
     app = Flask(__name__)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
-    engine, SessionLocal = init_engine_and_session()
-    Base.metadata.create_all(bind=engine)
+    # Initialize DB engine and session. If MySQL is unavailable we'll
+    # fall back to an in-memory SQLite DB so the app can still start
+    # and serve endpoints like /api/health while the real DB is fixed.
+    try:
+        engine, SessionLocal = init_engine_and_session()
+    except Exception:
+        # Log and create a lightweight SQLite fallback for availability
+        import logging
+        logging.exception("Failed to initialize MySQL engine, using SQLite fallback")
+        engine = create_engine("sqlite:///:memory:", future=True)
+        SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
+
+    # Ensure models/tables exist for the chosen engine
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        import logging
+        logging.exception("Failed to create tables on engine; continuing without create_all")
 
     def _ensure_students_columns():
         # SQLAlchemy create_all() won't add columns to an existing table.
@@ -998,12 +1016,50 @@ def create_app():
                         return error_response(f"Student with ID {student_id} not found", 404)
                 
                 # Verify guest exists if guest_id provided
+                # If a guest booking (guest=true) was submitted without a guest_id,
+                # try to find an existing GuestAccount by email or create one so
+                # the appointment can be linked and persisted.
+                guest = None
                 if guest_id:
                     guest = s.execute(
                         select(GuestAccount).where(GuestAccount.id == guest_id)
                     ).scalar_one_or_none()
                     if not guest:
                         return error_response(f"Guest with ID {guest_id} not found", 404)
+                else:
+                    # No explicit guest_id provided. If payload indicated a guest/walk-in,
+                    # try to lookup by email and create a lightweight guest record otherwise.
+                    try:
+                        payload_email = (body.get('email') or body.get('contact_email') or '').strip()
+                    except Exception:
+                        payload_email = ''
+
+                    if is_walkin or payload_email:
+                        # prefer email from body, fallback to provided guest name/email variables
+                        email_to_check = payload_email or (body.get('email') or '')
+                        name_to_use = (body.get('name') or body.get('fullName') or '')
+                        contact_to_use = (body.get('contact') or '')
+
+                        if email_to_check:
+                            guest = s.execute(select(GuestAccount).where(GuestAccount.email == email_to_check)).scalar_one_or_none()
+
+                        if not guest and (is_walkin or email_to_check or name_to_use):
+                            # create a minimal guest account so we can link the appointment
+                            # generate a random password hash since the guest won't login immediately
+                            try:
+                                pw = uuid.uuid4().hex
+                                g = GuestAccount(
+                                    name=(name_to_use or (body.get('name') or 'Guest')).strip(),
+                                    email=(email_to_check or (body.get('email') or '')).strip() or f"guest_{uuid.uuid4().hex[:8]}@example.invalid",
+                                    contact=(contact_to_use or '').strip(),
+                                    password=generate_password_hash(pw)
+                                )
+                                s.add(g)
+                                s.flush()
+                                guest = g
+                            except Exception:
+                                # fail gracefully and continue without guest link
+                                guest = None
                 
                 # Enforce maximum appointments per day (admin policy): max 5 per day
                 daily_count = s.execute(
@@ -1022,14 +1078,14 @@ def create_app():
                     )
                 ).scalars().all()
                 
-                if conflicts and (student_id or guest_id):
+                if conflicts and (student_id or guest_id or guest):
                     return error_response("This time slot has a scheduling conflict", 400)
                 
                 a = Appointment(
                     reason=reason,
                     status=status,
                     student_id=student_id,
-                    guest_id=guest_id,
+                    guest_id=(guest.id if guest is not None else guest_id),
                     date=dt_date,
                     start_time=st,
                     end_time=et,

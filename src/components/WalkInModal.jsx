@@ -10,7 +10,7 @@ const REASONS = [
   'Other'
 ]
 
-const ROLES = ['Student', 'Teaching Personnel', 'Alumni', 'Visitor']
+const ROLES = ['Student', 'Guest']
 
 export default function WalkInModal({ onClose, onSubmit }) {
   const [fullName, setFullName] = useState('')
@@ -19,6 +19,7 @@ export default function WalkInModal({ onClose, onSubmit }) {
   const [email, setEmail] = useState('')
   const [reason, setReason] = useState('')
   const [otherReason, setOtherReason] = useState('')
+  const [guestContact, setGuestContact] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const today = new Date()
   const defaultDate = today.toISOString().slice(0,10)
@@ -34,7 +35,7 @@ export default function WalkInModal({ onClose, onSubmit }) {
     try {
       setIsSubmitting(true)
       // allow parent to return a promise
-      await onSubmit({ fullName, role, studentNumber: role === 'Student' ? studentNumber : '', email, reason: submittedReason, date, time })
+      await onSubmit({ fullName, role, studentNumber: role === 'Student' ? studentNumber : '', email, reason: submittedReason, date, time, contact: role === 'Guest' ? guestContact : '' })
       // small delay so user sees loader
       await new Promise(r => setTimeout(r, 800))
       onClose && onClose()
@@ -67,18 +68,18 @@ export default function WalkInModal({ onClose, onSubmit }) {
           </label>
 
           <label className="form-group full">
-            <span className="label">Email Address <span className="req">*</span></span>
+            <span className="label">Email Address {role === 'Student' ? <span className="req">*</span> : null}</span>
             <input
               type="email"
-              placeholder="e.g name@domain.edu"
+              placeholder={role === 'Student' ? 'e.g name@domain.edu' : 'Optional for guests'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
+              required={role === 'Student'}
             />
           </label>
 
           <label className="form-group half">
-            <span className="label">Role <span className="req">*</span></span>
+            <span className="label">Type <span className="req">*</span></span>
             <select value={role} onChange={(e) => setRole(e.target.value)} required>
               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
@@ -93,6 +94,18 @@ export default function WalkInModal({ onClose, onSubmit }) {
                 value={studentNumber}
                 onChange={(e) => setStudentNumber(e.target.value)}
                 required
+              />
+            </label>
+          )}
+
+          {role === 'Guest' && (
+            <label className="form-group half">
+              <span className="label">Contact Number</span>
+              <input
+                type="text"
+                placeholder="Optional contact number"
+                value={guestContact}
+                onChange={(e) => setGuestContact(e.target.value)}
               />
             </label>
           )}

@@ -13,7 +13,7 @@ export default function Sidebar({ activeItem, onSelect }) {
     { id: 'calendar', label: 'Calendar', icon: '📅' },
     { id: 'availability', label: 'Availability', icon: '⏱' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
-    { id: 'register-visit', label: 'Register Visit', icon: '➕' }
+    { id: 'register-visit', label: 'Walk-in', icon: '🚶' }
   ]
 
   return (

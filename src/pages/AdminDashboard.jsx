@@ -5,7 +5,10 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, T
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 import Sidebar from '../components/Sidebar'
+import AdminWalkIn from './AdminWalkIn'
 import WalkInModal from '../components/WalkInModal'
+import ModalNoOverlay from '../components/ModalNoOverlay'
+import { useLocation } from 'react-router-dom'
 import NewUserModal from '../components/NewUserModal'
 import './AdminDashboard.css'
 import { listAppointments, updateAppointmentStatus, createAppointment as apiCreateAppointment, listAvailability, addAvailability, deleteAvailability, updateAvailability } from '../api'
@@ -26,6 +29,7 @@ export default function AdminDashboard() {
   const [declineReason, setDeclineReason] = useState('')
   const [showAllModal, setShowAllModal] = useState(false)
   const [showWalkInModal, setShowWalkInModal] = useState(false)
+  const location = useLocation()
   const [availability, setAvailability] = useState({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
   const [showAddDatedModal, setShowAddDatedModal] = useState(false)
   const [newDatedDate, setNewDatedDate] = useState('')
@@ -77,13 +81,26 @@ export default function AdminDashboard() {
   const refreshAppointments = async () => {
     try {
       const res = await listAppointments()
-      if (res && res.ok) {
-        setAppointments(Array.isArray(res.data) ? res.data : [])
+      if (res && res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        setAppointments(res.data)
       } else {
-        setAppointments([])
+        // Fallback: read appointments from localStorage (used by Walk-In page when backend is unavailable)
+        try {
+          const raw = localStorage.getItem('appointments')
+          const arr = raw ? JSON.parse(raw) : []
+          setAppointments(Array.isArray(arr) ? arr : [])
+        } catch (e) {
+          setAppointments([])
+        }
       }
     } catch (e) {
-      setAppointments([])
+      try {
+        const raw = localStorage.getItem('appointments')
+        const arr = raw ? JSON.parse(raw) : []
+        setAppointments(Array.isArray(arr) ? arr : [])
+      } catch (err) {
+        setAppointments([])
+      }
     }
   }
   useEffect(() => {
@@ -515,7 +532,7 @@ useEffect(() => {
   const pieChartData = () => {
     const map = computeStatusPie()
     return {
-      labels: Object.keys(map),
+      labels: Object.keys(map).map(k => k === 'confirmed' ? 'rescheduled' : k),
       datasets: [{ data: Object.values(map), backgroundColor: ['#2b6cb0','#48bb78','#f6ad55','#f56565','#a0aec0'] }]
     }
   }
@@ -562,7 +579,7 @@ useEffect(() => {
       )
     }
 
-    if (isAppointmentOngoing(selectedAppointment)) {
+    if (isAppointmentOngoing(selectedAppointment) && !['done','completed'].includes((status || '').toLowerCase())) {
       return (
         <>
           <button className="done-btn" onClick={async () => {
@@ -731,7 +748,7 @@ useEffect(() => {
                           <td style={{padding:10}}>{
                             a.status === 'pending' ? 'For Approval'
                             : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
-                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
+                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Confirmed')
                             : a.status === 'rescheduled' ? 'Rescheduled'
                             : (a.status === 'done' || a.status === 'completed') ? 'Completed'
                             : a.status === 'cancelled' ? 'Cancelled'
@@ -772,7 +789,7 @@ useEffect(() => {
                       {Object.entries(computeStatusPie()).map(([k,v],i)=> (
                         <div key={k} style={{display:'flex', gap:8, alignItems:'center', padding:'6px 0'}}>
                           <div style={{width:12, height:12, background:['#2b6cb0','#48bb78','#f6ad55','#f56565','#a0aec0'][i%5], borderRadius:4}} />
-                          <div style={{flex:1, fontWeight:700}}>{k}</div>
+                          <div style={{flex:1, fontWeight:700}}>{k === 'confirmed' ? 'rescheduled' : k}</div>
                           <div style={{color:'#666'}}>{v}</div>
                         </div>
                       ))}
@@ -870,7 +887,7 @@ useEffect(() => {
                   ) : apt.role ? (
                     <div className="sidebar-card-identifier">{apt.role}</div>
                   ) : apt.guest ? (
-                    <div className="sidebar-card-identifier">Guest</div>
+                    <div className="sidebar-card-identifier">{(apt.name && apt.name !== 'Guest') ? apt.name : 'Guest'}</div>
                   ) : apt.email ? (
                     <div className="sidebar-card-identifier">{apt.email}</div>
                   ) : null}
@@ -1278,13 +1295,13 @@ useEffect(() => {
         <Sidebar activeItem={activeItem} onSelect={(id) => {
           if (id === 'register-visit') {
             setShowWalkInModal(true)
-            setActiveItem(id)
             return
           }
           setActiveItem(id)
         }} />
+
         {showWalkInModal && (
-          <WalkInModal onClose={() => setShowWalkInModal(false)} onSubmit={(p) => { handleWalkInSubmit(p); setShowWalkInModal(false) }} />
+          <WalkInModal onClose={() => setShowWalkInModal(false)} onSubmit={handleWalkInSubmit} />
         )}
       </main>
     </div>

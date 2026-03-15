@@ -36,6 +36,8 @@ export default function StudentAuth() {
   const [signupError, setSignupError] = useState('')
   const loginTimer = useRef(null)
   const signupTimer = useRef(null)
+  const loginLoadTimer = useRef(null)
+  const signupLoadTimer = useRef(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSkeleton, setShowSkeleton] = useState(false)
   const [showSpinner, setShowSpinner] = useState(false)
@@ -44,6 +46,8 @@ export default function StudentAuth() {
     return () => {
       if (loginTimer.current) clearTimeout(loginTimer.current)
       if (signupTimer.current) clearTimeout(signupTimer.current)
+      if (loginLoadTimer.current) clearTimeout(loginLoadTimer.current)
+      if (signupLoadTimer.current) clearTimeout(signupLoadTimer.current)
     }
   }, [])
 
@@ -111,6 +115,7 @@ export default function StudentAuth() {
     e.preventDefault()
     setLoginError('')
     setSignupError('')
+    const start = Date.now()
     setIsSubmitting(true)
     try {
       const res = await studentLogin(loginForm.studentId, loginForm.password)
@@ -130,7 +135,6 @@ export default function StudentAuth() {
         // show success toast then spinner for 2s, set session flag for dashboard skeleton, then navigate
         showToast('Logged in successfully')
         setShowSpinner(true)
-        setIsSubmitting(false)
         try { sessionStorage.setItem('postLoginSkeleton', '1') } catch (e) {}
         setTimeout(() => {
           setShowSpinner(false)
@@ -141,7 +145,13 @@ export default function StudentAuth() {
       setLoginErrorTimed(res?.error || 'Invalid student number or password')
     }
     } finally {
-      setIsSubmitting(false)
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      if (loginLoadTimer.current) clearTimeout(loginLoadTimer.current)
+      loginLoadTimer.current = setTimeout(() => {
+        setIsSubmitting(false)
+        loginLoadTimer.current = null
+      }, remaining)
     }
   }
 
@@ -149,7 +159,6 @@ export default function StudentAuth() {
     e.preventDefault()
     setSignupError('')
     setLoginError('')
-    setIsSubmitting(true)
     // Basic client-side validation
     const first = (signupForm.firstName || '').trim()
     const middle = (signupForm.middleName || '').trim()
@@ -203,10 +212,18 @@ export default function StudentAuth() {
       name: fullName
     }
     let res
+    const start = Date.now()
     try {
+      setIsSubmitting(true)
       res = await studentSignup(payload)
     } finally {
-      setIsSubmitting(false)
+      const elapsed = Date.now() - start
+      const remaining = Math.max(0, 2000 - elapsed)
+      if (signupLoadTimer.current) clearTimeout(signupLoadTimer.current)
+      signupLoadTimer.current = setTimeout(() => {
+        setIsSubmitting(false)
+        signupLoadTimer.current = null
+      }, remaining)
     }
     if (res?.ok) {
       const combinedName =
