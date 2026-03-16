@@ -3,7 +3,7 @@ import { updateStudentAvatar, getStudentProfile } from '../api'
 import './ProfileModal.css'
 
 export default function ProfileModal({ userType = 'student', onClose }) {
-  const prefix = userType === 'admin' ? 'admin' : 'student'
+  const prefix = userType === 'admin' ? 'admin' : (userType === 'guest' ? 'guest' : 'student')
   const nameKey = `${prefix}Name`
   const emailKey = `${prefix}Email`
   const idKey = `${prefix}Id`
@@ -73,6 +73,10 @@ export default function ProfileModal({ userType = 'student', onClose }) {
     const reader = new FileReader()
     reader.onload = (ev) => {
       setPreview(ev.target.result)
+      // Clear old avatar from localStorage so new one takes effect
+      try {
+        localStorage.removeItem(avatarKey)
+      } catch (e) {}
     }
     reader.readAsDataURL(f)
   }
@@ -80,11 +84,11 @@ export default function ProfileModal({ userType = 'student', onClose }) {
   const handleSave = () => {
     const run = async () => {
       // Only upload if we have a new data URL; otherwise just persist local preview.
-      const studentNumber = ident
       let finalAvatar = preview
 
-      if (preview && preview.startsWith('data:image') && studentNumber) {
-        const res = await updateStudentAvatar(studentNumber, preview)
+      // For students, try to upload to server. For guests and admins, just use local preview.
+      if (userType === 'student' && ident && preview && preview.startsWith('data:image')) {
+        const res = await updateStudentAvatar(ident, preview)
         if (res?.ok && res.avatar) {
           finalAvatar = res.avatar
         }
@@ -120,11 +124,15 @@ export default function ProfileModal({ userType = 'student', onClose }) {
               <label className="field-label">Full Name</label>
               <input className="field-input" value={name} disabled />
 
-              <label className="field-label">Student ID</label>
-              <input className="field-input" value={ident} disabled />
+              {userType !== 'guest' && (
+                <>
+                  <label className="field-label">Student ID</label>
+                  <input className="field-input" value={ident} disabled />
 
-              <label className="field-label">Course</label>
-              <input className="field-input" value={course} disabled />
+                  <label className="field-label">Course</label>
+                  <input className="field-input" value={course} disabled />
+                </>
+              )}
 
               <label className="field-label">Email Address</label>
               <input className="field-input" value={email} disabled />

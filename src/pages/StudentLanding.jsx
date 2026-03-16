@@ -67,7 +67,7 @@ export default function StudentLanding() {
     const newAppointment = {
       id: Date.now(),
       date: data.date.toLocaleDateString(),
-      iso: data.date.toISOString().slice(0,10),
+      iso: `${data.date.getFullYear()}-${String(data.date.getMonth()+1).padStart(2,'0')}-${String(data.date.getDate()).padStart(2,'0')}`,
       time: displayTime,
       start: start,
       end: end,
@@ -101,7 +101,7 @@ export default function StudentLanding() {
 
         const conflict = existing.some(a => {
           if (!a || !(a.iso || a.date)) return false
-          const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+          const iso = a.iso || (a.date ? a.date : '')
           if (iso !== newAppointment.iso) return false
           if ((a.status || '').toLowerCase() === 'cancelled') return false
           const es = a.start || a.start_time || ''
@@ -325,18 +325,14 @@ export default function StudentLanding() {
   const isAppointmentOngoing = (apt) => {
     try {
       if (!apt) return false
-      const iso = apt.iso || (apt.date ? (() => {
-        const d = new Date(apt.date)
-        if (isNaN(d)) return ''
-        return d.toISOString().slice(0,10)
-      })() : '')
+      const iso = apt.iso || (apt.date ? (apt.date) : '')
       if (!iso) return false
-      const todayIso = (new Date()).toISOString().slice(0,10)
+      const now = new Date()
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
       if (iso !== todayIso) return false
       const startMin = toMinutes(apt.start || apt.time || '')
       const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
       if (startMin === null || endMin === null) return false
-      const now = new Date()
       const nowMin = now.getHours() * 60 + now.getMinutes()
       return nowMin >= startMin && nowMin < endMin
     } catch (e) { return false }

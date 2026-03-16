@@ -194,6 +194,9 @@
 .dot-done{ background:#2FC26A }
 .dot-completed{ background:#2FC26A }
 .dot-approved{ background:#2FC26A }
+/* additional dot variants */
+.dot-rescheduled{ background:#FBBF24 }
+.dot-ongoing{ background:#FF9833 }
 
 /* Sidebar / appointment list */
 .admin-sidebar{ display:flex; flex-direction:column; gap:16px; background:#fff; padding:24px; border-radius:18px; box-shadow: var(--shadow-card) }
@@ -242,6 +245,9 @@
 /* Rescheduled / Confirmed -> yellow */
 .sidebar-card.status-rescheduled{ background: #FFFBEB }
 .sidebar-card.status-confirmed{ background: #FFFBEB }
+/* Ongoing card style (use similar to confirmed but allow orange accents) */
+.sidebar-card.status-ongoing{ background: #FFF4EA }
+.sidebar-card.status-ongoing .sidebar-card-icon{ background: #FF9833; color:#fff }
 
 .sidebar-card.status-rescheduled .sidebar-card-icon, .sidebar-card.status-confirmed .sidebar-card-icon{ background: #FBBF24; color:#fff }
 .sidebar-card-status.status-rescheduled{ background: rgba(251,191,36,0.12); color: #B45309 }

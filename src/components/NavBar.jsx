@@ -52,7 +52,7 @@ export default function NavBar({ userType = 'student' }) {
     } catch (e) { return '' }
   }
   const handleLogout = () => {
-    // clear any stored student/admin info including avatar and course/contact
+    // clear any stored student/admin/guest info including avatar and course/contact
     localStorage.removeItem('studentAppointments')
     localStorage.removeItem('studentName')
     localStorage.removeItem('studentEmail')
@@ -61,8 +61,18 @@ export default function NavBar({ userType = 'student' }) {
     localStorage.removeItem('studentContact')
     localStorage.removeItem('studentAvatar')
     localStorage.removeItem('adminAvatar')
-    // optionally remove admin-specific items (extend as needed)
-    navigate(userType === 'admin' ? '/admin/login' : '/student/login')
+    localStorage.removeItem('guestName')
+    localStorage.removeItem('guestEmail')
+    localStorage.removeItem('guestId')
+    localStorage.removeItem('guestAppointments')
+    // Navigate to appropriate login page based on user type
+    if (userType === 'admin') {
+      navigate('/admin/login')
+    } else if (userType === 'guest') {
+      navigate('/guest/login')
+    } else {
+      navigate('/student/login')
+    }
   }
 
   // close dropdowns when clicking outside
@@ -82,7 +92,7 @@ export default function NavBar({ userType = 'student' }) {
   // load avatar for current user and refresh when profile modal closes or notifications change
   useEffect(() => {
     try {
-      const key = userType === 'admin' ? 'adminAvatar' : 'studentAvatar'
+      const key = userType === 'admin' ? 'adminAvatar' : (userType === 'guest' ? 'guestAvatar' : 'studentAvatar')
       const a = typeof window !== 'undefined' && localStorage.getItem(key)
       setAvatar(a || null)
     } catch (e) { setAvatar(null) }

@@ -67,6 +67,22 @@ export default function AdminDashboard() {
     } catch (e) { return '' }
   }
 
+  // return local YYYY-MM-DD for a Date or string input (avoids UTC shift)
+  const localIso = (input) => {
+    if (!input) return ''
+    try {
+      if (input instanceof Date) {
+        return `${input.getFullYear()}-${String(input.getMonth()+1).padStart(2,'0')}-${String(input.getDate()).padStart(2,'0')}`
+      }
+      const s = String(input)
+      const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+      if (m) return m[1]
+      const d = new Date(s)
+      if (!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    } catch (e) {}
+    return ''
+  }
+
   const prevMonth = () => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1))
   const nextMonth = () => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1))
 
@@ -76,7 +92,7 @@ export default function AdminDashboard() {
   const blanks = Array(firstDay).fill(null)
   const year = selectedDate.getFullYear()
   const month = selectedDate.getMonth()
-  const selectedIso = selectedDate.toISOString().slice(0,10)
+  const selectedIso = localIso(selectedDate)
 
   const refreshAppointments = async () => {
     try {
@@ -125,7 +141,7 @@ useEffect(() => {
   // helper: parse appointment date+time into a Date
   const parseAppointmentStart = (a) => {
     try {
-      const datePart = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+      const datePart = a.iso || (a.date ? a.date : '')
       const timePart = a.start || a.time || ''
       if (!datePart || !timePart) return null
       const m = timePart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
@@ -160,18 +176,14 @@ useEffect(() => {
     const isAppointmentOngoing = (apt) => {
       try {
         if (!apt) return false
-        const iso = apt.iso || (apt.date ? (() => {
-          const d = new Date(apt.date)
-          if (isNaN(d)) return ''
-          return d.toISOString().slice(0,10)
-        })() : '')
+        const iso = apt.iso || (apt.date ? apt.date : '')
         if (!iso) return false
-        const todayIso = (new Date()).toISOString().slice(0,10)
+        const now = new Date()
+        const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
         if (iso !== todayIso) return false
         const startMin = toMinutes(apt.start || apt.time || '')
         const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
         if (startMin === null || endMin === null) return false
-        const now = new Date()
         const nowMin = now.getHours() * 60 + now.getMinutes()
         return nowMin >= startMin && nowMin < endMin
       } catch (e) { return false }
@@ -202,7 +214,7 @@ useEffect(() => {
 
   const handleWalkInSubmit = async (payload) => {
     const now = new Date()
-    let iso = now.toISOString().slice(0,10)
+    let iso = localIso(now)
     let start = now.toTimeString().slice(0,5)
     if (payload.date) iso = payload.date
     if (payload.time) start = payload.time
@@ -366,8 +378,8 @@ useEffect(() => {
           const aptStart = parseAppointmentStart(a)
           if (!aptStart) continue
           // compare only when appointment date matches this availability date
-          const aptIso = (a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : ''))
-          if (!aptIso || aptIso !== (new Date(isoDate)).toISOString().slice(0,10)) continue
+          const aptIso = (a.iso || (a.date ? a.date : ''))
+          if (!aptIso || aptIso !== localIso(isoDate)) continue
           if (rangeStart && rangeEnd) {
             if (aptStart >= rangeStart && aptStart < rangeEnd) overlapping.push(a)
           } else {
@@ -427,11 +439,11 @@ useEffect(() => {
         if ((a.status || '').toLowerCase() !== filterStatus.toLowerCase()) return false
       }
       if (fromDateFilter) {
-        const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+        const iso = a.iso || (a.date ? a.date : '')
         if (!iso || iso < fromDateFilter) return false
       }
       if (toDateFilter) {
-        const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+        const iso = a.iso || (a.date ? a.date : '')
         if (!iso || iso > toDateFilter) return false
       }
       return true
@@ -484,7 +496,7 @@ useEffect(() => {
     const labels = ['Mon','Tue','Wed','Thu','Fri']
     const counts = [0,0,0,0,0]
     appointments.forEach(a => {
-      const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+      const iso = a.iso || (a.date ? a.date : '')
       if (!iso) return
       // parse YYYY-MM-DD as local date to avoid timezone shift
       const parts = String(iso).split('-')
@@ -512,9 +524,10 @@ useEffect(() => {
     const labels = monthNames.map(m => m.slice(0,3))
     const counts = Array(12).fill(0)
     appointments.forEach(a => {
-      const iso = a.iso || (a.date ? (new Date(a.date)).toISOString().slice(0,10) : '')
+      const iso = a.iso || (a.date ? a.date : '')
       if (!iso) return
-      const d = new Date(iso)
+      const parts = String(iso).split('-')
+      const d = (parts.length >= 3) ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(iso)
       if (isNaN(d)) return
       counts[d.getMonth()]++
     })
@@ -672,7 +685,7 @@ useEffect(() => {
               {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
               {days.map(d => {
                 const dateObj = new Date(year, month, d)
-                const iso = dateObj.toISOString().slice(0,10)
+                const iso = localIso(dateObj)
                 const apptsForDay = appointments.filter(a => a.iso === iso)
                 const statuses = [...new Set(apptsForDay.map(a => a.status))]
                 return (
@@ -748,7 +761,7 @@ useEffect(() => {
                           <td style={{padding:10}}>{
                             a.status === 'pending' ? 'For Approval'
                             : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
-                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Confirmed')
+                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
                             : a.status === 'rescheduled' ? 'Rescheduled'
                             : (a.status === 'done' || a.status === 'completed') ? 'Completed'
                             : a.status === 'cancelled' ? 'Cancelled'
@@ -821,35 +834,22 @@ useEffect(() => {
                 }`}>
                 <div className="sidebar-card-meta">
                   <span className="sidebar-card-time-meta">{(() => {
-                    // Prefer a timestamp (id as epoch or submittedAt) to show when action happened
+                    // Prefer rescheduled values when present; otherwise use iso/date and start/time
                     const maybeTs = (typeof apt.id === 'number' && apt.id > 1000000000) ? new Date(apt.id) : (apt.submittedAt ? new Date(apt.submittedAt) : null)
                     const now = new Date()
                     const timeStr = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
                     if (maybeTs) {
-                      if (maybeTs.toDateString() === now.toDateString()) {
-                        return `Today at ${timeStr(maybeTs)}`
-                      }
+                      if (maybeTs.toDateString() === now.toDateString()) return `Today at ${timeStr(maybeTs)}`
                       return `${maybeTs.toLocaleDateString()} at ${timeStr(maybeTs)}`
                     }
-
-                    
-                    if (apt.start) {
-                      // if appointment is today, show 'Today at ...'
-                      const aptDate = apt.iso || ''
-                      const todayIso = new Date().toISOString().slice(0,10)
-                      if (aptDate === todayIso) return `Today at ${apt.start}`
-                      return `${apt.date ? apt.date + ' at ' : ''}${apt.start}`
+                    const scheduledIso = apt.rescheduleDate || apt.reschedule_date || apt.iso || (apt.date ? toIsoDate(apt.date) : '')
+                    const scheduledStart = apt.rescheduleStart || apt.reschedule_start || apt.start || apt.time || ''
+                    if (scheduledStart) {
+                      const todayIso = toIsoDate(new Date())
+                      if (scheduledIso === todayIso) return `Today at ${scheduledStart}`
+                      return `${scheduledIso ? isoToLocalDateString(scheduledIso) + ' at ' + scheduledStart : (apt.date ? apt.date + ' at ' + scheduledStart : scheduledStart)}`
                     }
-
-                    if (apt.time) {
-                      const aptDate = apt.iso || ''
-                      const todayIso = new Date().toISOString().slice(0,10)
-                      if (aptDate === todayIso) return `Today at ${apt.time}`
-                      return `${apt.date ? apt.date + ' at ' : ''}${apt.time}`
-                    }
-
-                    return apt.date || ''
+                    return scheduledIso ? isoToLocalDateString(scheduledIso) : (apt.date || '')
                   })()}</span>
                   <span className={`sidebar-card-status status-text ${
                     apt.status === 'confirmed' ? 'status-confirmed'
@@ -872,9 +872,9 @@ useEffect(() => {
                   </span>
                 </div>
 
-                <div className="sidebar-card-left">
+                  <div className="sidebar-card-left">
                   <div className="sidebar-card-icon">🕗</div>
-                  <div className="sidebar-card-time-left">{apt.start || ''}{apt.start && apt.end ? ' - ' + apt.end : ''}</div>
+                  <div className="sidebar-card-time-left">{(apt.rescheduleStart || apt.reschedule_start || apt.start || apt.time) || ''}{(apt.rescheduleStart || apt.reschedule_start || apt.start) && (apt.rescheduleEnd || apt.reschedule_end || apt.end) ? ' - ' + (apt.rescheduleEnd || apt.reschedule_end || apt.end) : ''}</div>
                 </div>
 
                 <div className="sidebar-card-info">
@@ -882,12 +882,12 @@ useEffect(() => {
                   {apt.course && <div className="sidebar-card-course">{apt.course}</div>}
 
                   {/* Identifier: student ID, role (alumni/teaching), guest, or email */}
-                  {apt.studentId ? (
+                  {apt.guest ? (
+                    <div className="sidebar-card-identifier">Guest</div>
+                  ) : apt.studentId ? (
                     <div className="sidebar-card-identifier">Student ID: {apt.studentId}</div>
                   ) : apt.role ? (
                     <div className="sidebar-card-identifier">{apt.role}</div>
-                  ) : apt.guest ? (
-                    <div className="sidebar-card-identifier">{(apt.name && apt.name !== 'Guest') ? apt.name : 'Guest'}</div>
                   ) : apt.email ? (
                     <div className="sidebar-card-identifier">{apt.email}</div>
                   ) : null}
@@ -1017,7 +1017,7 @@ useEffect(() => {
                       <div className="details-course">{selectedAppointment.course || selectedAppointment.department || selectedAppointment.courseName}</div>
                     )}
                     {selectedAppointment.studentId ? (
-                      <div className="details-id">{selectedAppointment.studentId}</div>
+                      <div className="details-id">Student ID: {selectedAppointment.studentId}</div>
                     ) : selectedAppointment.guest ? (
                       <div className="details-id">Guest</div>
                     ) : selectedAppointment.email ? (

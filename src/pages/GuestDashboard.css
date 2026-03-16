@@ -1,33 +1,509 @@
+/* Guest Dashboard - Enhanced styling matching StudentLanding */
 .guest-dashboard {
-  /* add background image similar to auth pages */
   min-height: 100vh;
-  background-image: url('/Images/NCbluebg.png');
+  background: linear-gradient(0deg, rgba(61, 63, 68, 0.59), rgba(61, 63, 68, 0.59));
+  background-image: 
+    linear-gradient(0deg, rgba(61, 63, 68, 0.59), rgba(61, 63, 68, 0.59)),
+    url('../../Images/NCbluebg.png');
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
 }
 
 .guest-main {
-  max-width: 1100px;
-  margin: 2.5rem auto;
-  padding: 0 1rem;
-  position: relative;
-  z-index: 1; /* make sure main content sits above background and other low z-index elements */
+  padding: 1.5rem 2rem 4rem;
+  max-width: 1400px;
+  margin: 0 auto;
 }
+
 .guest-hero {
   text-align: center;
   color: #fff;
+  margin-bottom: 2rem;
+}
+
+.guest-hero h1 {
+  font-family: var(--font-montserrat);
+  font-weight: 700;
+  font-size: clamp(28px, 3vw, 39px);
+  margin: 0 0 0.5rem;
+  color: var(--card-bg);
+}
+
+.guest-hero p {
+  font-family: var(--font-inter);
+  margin: 0;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.appointments-section {
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-header h2 {
+  font-family: var(--font-montserrat);
+  font-weight: 700;
+  font-size: 28px;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.section-subtitle {
+  font-family: var(--font-inter);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-dark);
+  margin: 0.25rem 0 0;
+}
+
+.btn-appointment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--button-blue);
+  color: var(--card-bg);
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0px 6px 13px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-inter);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-appointment:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.add-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.section-divider {
+  height: 1px;
+  background: rgba(39, 39, 39, 0.19);
+  margin: 1rem 0;
+}
+
+.appointments-content,
+.history-content {
+  min-height: 200px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+.empty-icon {
+  width: 98px;
+  height: 98px;
+  color: var(--text-dark);
+  margin-bottom: 1rem;
+}
+
+.empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state p {
+  font-family: var(--font-montserrat);
+  font-weight: 500;
+  font-size: 24px;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.appointment-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.appointment-card {
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 3rem;
+  background: #ffffff;
+  border: none;
+  border-radius: 15px;
+  box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  min-height: 140px;
+}
+
+.appointment-card:hover {
+  box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.card-pending {
+  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%);
+  color: #083a66;
+  box-shadow: 0 12px 28px rgba(11, 99, 183, 0.06);
+}
+
+.card-cancelled {
+  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%);
+  color: #6b2a2a;
+  box-shadow: 0 16px 40px rgba(196, 30, 58, 0.06);
+  border-radius: 18px;
+}
+
+.card-done,
+.card-completed {
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.card-approved {
+  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
+}
+
+.apt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.apt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.apt-title-section {
+  flex: 1;
+}
+
+.apt-title {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.apt-datetime {
+  font-size: 14px;
+  color: var(--text-dark);
+  margin-top: 0.25rem;
+}
+
+.apt-reason-section {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 1.5rem;
 }
-.guest-hero h1 { font-size: 36px; margin: 0 0 8px; color: var(--primary-blue); }
-.guest-hero p { margin: 0; color: rgba(255,255,255,0.9) }
-.guest-cards { display: grid; gap: 1.25rem; grid-template-columns: 1fr; }
-.card { background: white; border-radius: 12px; padding: 1.25rem; box-shadow: 0 12px 28px rgba(6,10,20,0.12); position: relative; z-index: 2 }
-.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem }
-.card-header h2 { margin: 0; font-size: 20px }
-.btn-book { background: var(--button-blue); color: white; border-radius: 8px; padding: 8px 12px; border: none; cursor: pointer; z-index: 3 }
-.card-body { min-height: 80px; display:flex; align-items:center; justify-content:center; color: rgba(30,40,60,0.6) }
-.empty { padding: 1.5rem 0 }
 
-@media (min-width: 800px) {
-  .guest-cards { grid-template-columns: 1fr 1fr }
+.apt-reason-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+
+.apt-reason-text {
+  font-size: 14px;
+  color: var(--text-dark);
+  margin-top: 0.25rem;
+}
+
+.apt-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.apt-submitted {
+  font-size: 12px;
+  color: var(--text-dark);
+}
+
+.status-text {
+  padding: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  text-transform: none;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.status-text.status-pending {
+  color: #60A5FA;
+}
+
+.status-text.status-cancelled {
+  color: #A33131;
+}
+
+.status-text.status-approved {
+  color: #2FC26A;
+}
+
+.status-text.status-ongoing {
+  color: #D9730D;
+}
+
+.cancel-btn {
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #C41E3A;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 92, 92, 0.3);
+  transform: scale(1.1);
+}
+
+/* Details Modal Styling */
+.details-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.details-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  max-width: 520px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.details-top {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.details-main {
+  flex: 1;
+}
+
+.details-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.details-id {
+  font-size: 14px;
+  color: var(--text-dark);
+  margin-top: 0.5rem;
+}
+
+.details-status {
+  font-weight: 700;
+  font-size: 14px;
+  text-align: right;
+}
+
+.details-status.status-pending {
+  color: #60A5FA;
+}
+
+.details-status.status-cancelled {
+  color: #A33131;
+}
+
+.details-status.status-approved {
+  color: #2FC26A;
+}
+
+.details-status.status-ongoing {
+  color: #D9730D;
+}
+
+.details-section {
+  margin-bottom: 1.5rem;
+}
+
+.details-section h3 {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-dark);
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.details-section p {
+  font-size: 14px;
+  color: var(--text-dark);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.details-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(39, 39, 39, 0.1);
+}
+
+.close-btn {
+  padding: 10px 20px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #e0e0e0;
+}
+
+.decline-btn {
+  padding: 10px 20px;
+  background: #C41E3A;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.decline-btn:hover {
+  background: #a31830;
+}
+
+/* Skeleton loading styles */
+.skeleton-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.skeleton-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.history-section {
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.history-content {
+  min-height: 200px;
+}
+
+.empty-icon.history-icon {
+  color: var(--text-dark);
+}
+
+@media (max-width: 768px) {
+  .guest-main {
+    padding: 1rem;
+  }
+
+  .appointments-section {
+    padding: 1rem;
+  }
+
+  .apt-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .apt-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .appointment-card {
+    padding: 1.5rem;
+  }
+
+  .details-modal {
+    width: 95%;
+    padding: 1.5rem;
+  }
 }

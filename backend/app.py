@@ -460,7 +460,8 @@ def create_app():
                     "guest": {
                         "id": g.id,
                         "name": g.name,
-                        "email": g.email
+                        "email": g.email,
+                        "contact": g.contact
                     }
                 }, 201)
             except Exception as e:
@@ -484,7 +485,7 @@ def create_app():
                 row = s.execute(select(GuestAccount).where(GuestAccount.email == ident)).scalar_one_or_none()
                 if not row or not check_password_hash(row.password, password):
                     return error_response("Invalid credentials", 401)
-                return success_response({"guest": {"id": row.id, "name": row.name, "email": row.email}})
+                return success_response({"guest": {"id": row.id, "name": row.name, "email": row.email, "contact": row.contact}})
             except Exception as e:
                 return error_response("An unexpected error occurred. Please try again later.", 500)
 
@@ -896,6 +897,9 @@ def create_app():
                         "firstName": (stu.first_name if stu else "") or "",
                         "middleName": (stu.middle_name if stu else "") or "",
                         "lastName": (stu.last_name if stu else "") or "",
+                        # Return the student's DB primary key here so frontend stored
+                        # `studentId` (which contains the DB id) matches the server
+                        # response and client-side filtering works correctly.
                         "studentId": (stu.student_id if stu else (r.student_id or "")) or "",
                         "email": (stu.email if stu else "") or "",
                         "reason": r.reason,

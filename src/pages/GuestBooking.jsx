@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import AuthLayout from '../components/AuthLayout'
-import { createAppointment as apiCreateAppointment } from '../api'
+import Toast from '../components/Toast'
+import Button from '../components/Button'
+import { createAppointment as apiCreateAppointment, listAppointments as apiListAppointments } from '../api'
 import './GuestBooking.css'
 
 const APPOINTMENT_REASONS = [
@@ -39,12 +40,18 @@ export default function GuestBooking() {
     navigate('/guest/login', { replace: true })
     return null
   }
+  
   const [date, setDate] = useState(new Date())
   const [time, setTime] = useState('')
   const [reason, setReason] = useState('')
+  const [otherReason, setOtherReason] = useState('')
   const [availableSlots, setAvailableSlots] = useState([])
   const [slotsMessage, setSlotsMessage] = useState('')
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [confirmMessage, setConfirmMessage] = useState('')
+  const [confirmType, setConfirmType] = useState('success')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December']
@@ -123,118 +130,238 @@ export default function GuestBooking() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    setIsSubmitting(true)
+    
     ;(async () => {
       try {
         const guestName = (effectiveGuestInfo && ((effectiveGuestInfo.firstName || '') + ' ' + (effectiveGuestInfo.lastName || '')) ) || storedGuestName || ''
         const guestEmail = (effectiveGuestInfo && (effectiveGuestInfo.email || '')) || storedGuestEmail || ''
-        const iso = date.toISOString().slice(0,10)
-        const start = time || ''
-        const payload = {
-          name: guestName,
-          email: guestEmail,
-          reason: reason,
-          iso: iso,
-          start: start,
+        
+        // Build formatted appointment object
+        const newAppointment = {
+          id: Date.now(),
+          date: date.toLocaleDateString(),
+          iso: `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`,
+          time: time,
+          start: time,
+          end: '',
+          reason: reason === 'Other' && otherReason ? otherReason : reason,
           status: 'pending',
-          guest: true
+          email: guestEmail,
+          name: guestName,
+          guest: true,
+          submittedAt: new Date().toISOString()
         }
 
-        const res = await apiCreateAppointment(payload)
-        if (res && res.ok) {
-          // navigate to guest dashboard or show confirmation
-          navigate('/guest/dashboard', { state: { message: 'Appointment requested successfully' } })
-        } else {
-          // show error message inline
-          const msg = (res && res.error) || 'Unable to create appointment. Please try again.'
-          setSlotsMessage(msg)
+        // Helper: convert time to minutes for conflict checking
+        const toMinutes = (t) => {
+          if (!t) return null
+          const m = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+          if (!m) return null
+          let hh = Number(m[1])
+          const mm = Number(m[2])
+          const ampm = m[3].toUpperCase()
+          if (ampm === 'PM' && hh !== 12) hh += 12
+          if (ampm === 'AM' && hh === 12) hh = 0
+          return hh * 60 + mm
         }
-      } catch (e) {
-        setSlotsMessage('Unable to create appointment. Please check your connection.')
+
+        // Check for existing/conflicting appointments
+        try {
+          const existingRes = await apiListAppointments()
+          if (existingRes && existingRes.ok) {
+            const existing = existingRes.data || []
+            const newStartMin = toMinutes(time)
+            const newEndMin = (newStartMin !== null ? newStartMin + 30 : null)
+
+            const conflict = existing.some(a => {
+              if (!a || !(a.iso || a.date)) return false
+              const iso = a.iso || (a.date ? a.date : '')
+              if (iso !== newAppointment.iso) return false
+              if ((a.status || '').toLowerCase() === 'cancelled') return false
+              const es = a.start || a.start_time || ''
+              const ee = a.end || a.end_time || ''
+              const esMin = toMinutes(es)
+              const eeMin = toMinutes(ee) || (esMin !== null ? esMin + 30 : null)
+              if (esMin === null || newStartMin === null) {
+                return es && time && es.trim() === time.trim()
+              }
+              return !(newEndMin <= esMin || eeMin <= newStartMin)
+            })
+
+            if (conflict) {
+              setConfirmType('error')
+              setShowConfirm(true)
+              setConfirmMessage('An appointment already exists for that date and time. Please choose a different time.')
+              setTimeout(() => setShowConfirm(false), 5000)
+              setIsSubmitting(false)
+              return
+            }
+          }
+        } catch (e) {
+          // ignore and proceed optimistically
+        }
+
+        // Save to localStorage
+        try {
+          const rawApts = localStorage.getItem('appointments')
+          const apts = rawApts ? JSON.parse(rawApts) : []
+          apts.unshift(newAppointment)
+          localStorage.setItem('appointments', JSON.stringify(apts))
+
+          // Create notification for admin
+          const rawNot = localStorage.getItem('notifications')
+          const notifications = rawNot ? JSON.parse(rawNot) : []
+          notifications.unshift({
+            id: Date.now(),
+            appointmentId: newAppointment.id,
+            title: 'New appointment request',
+            message: `${guestName} requested an appointment on ${newAppointment.date} at ${time}`,
+            createdAt: Date.now(),
+            read: false,
+            email: guestEmail,
+            target: 'admin'
+          })
+          localStorage.setItem('notifications', JSON.stringify(notifications))
+        } catch (e) {}
+
+        // Send to API
+        try {
+          const res = await apiCreateAppointment({
+            id: newAppointment.id,
+            name: guestName,
+            email: guestEmail,
+            reason: newAppointment.reason,
+            iso: newAppointment.iso,
+            start: time,
+            end: '',
+            status: 'pending',
+            guest: true
+          })
+
+          if (res && res.ok) {
+            setConfirmType('success')
+            setShowConfirm(true)
+            setConfirmMessage('Appointment requested successfully!')
+            setTimeout(() => {
+              setShowConfirm(false)
+              navigate('/guest/dashboard', { state: { message: 'Appointment requested successfully' } })
+            }, 2000)
+          } else {
+            setConfirmType('error')
+            setShowConfirm(true)
+            setConfirmMessage(res?.error || 'Unable to create appointment. It will remain visible locally until resolved.')
+            setTimeout(() => setShowConfirm(false), 5000)
+          }
+        } catch (e) {
+          setConfirmType('error')
+          setShowConfirm(true)
+          setConfirmMessage('Unable to create appointment. Please check your connection.')
+          setTimeout(() => setShowConfirm(false), 5000)
+        }
+      } finally {
+        setIsSubmitting(false)
       }
     })()
   }
 
   return (
     <div className="guest-booking-page">
-      <AuthLayout side="left" subtitle="Schedule your appointments with ease.">
-        <div className="guest-booking-form">
+      <div className="guest-booking-form">
+        <div style={{marginBottom: '1.5rem'}}>
           <h2 className="guest-booking-title">Book Appointment</h2>
           <p className="guest-booking-subtitle">Select your preferred date, time, and reason for visit</p>
-          <form onSubmit={handleSubmit}>
-            <div className="booking-section">
-              <h3>Select Date</h3>
-              <div className="booking-calendar">
-                <div className="calendar-header">
-                  <button type="button" onClick={prevMonth}>‹</button>
-                  <span>{monthNames[date.getMonth()]} {date.getFullYear()}</span>
-                  <button type="button" onClick={nextMonth}>›</button>
-                </div>
-                <div className="calendar-weekdays">
-                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
-                    <span key={d} className="weekday">{d}</span>
-                  ))}
-                </div>
-                <div className="calendar-days">
-                  {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
-                  {days.map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`day ${date.getDate() === d ? 'selected' : ''}`}
-                      onClick={() => setDate(new Date(date.getFullYear(), date.getMonth(), d))}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
+        </div>
+        <Toast show={showConfirm} type={confirmType} message={confirmMessage} onClose={() => setShowConfirm(false)} />
+        <form onSubmit={handleSubmit}>
+          <div className="booking-section">
+            <h3>Select Date</h3>
+            <div className="booking-calendar">
+              <div className="calendar-header">
+                <button type="button" onClick={prevMonth} disabled={isSubmitting}>‹</button>
+                <span>{monthNames[date.getMonth()]} {date.getFullYear()}</span>
+                <button type="button" onClick={nextMonth} disabled={isSubmitting}>›</button>
+              </div>
+              <div className="calendar-weekdays">
+                {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
+                  <span key={d} className="weekday">{d}</span>
+                ))}
+              </div>
+              <div className="calendar-days">
+                {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
+                {days.map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`day ${date.getDate() === d ? 'selected' : ''}`}
+                    onClick={() => setDate(new Date(date.getFullYear(), date.getMonth(), d))}
+                    disabled={isSubmitting}
+                  >
+                    {d}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="booking-section">
-              <h3>Preferred Time</h3>
-              <select
+          </div>
+
+          <div className="booking-section">
+            <h3>Preferred Time</h3>
+            <select
+              className="booking-select"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              required
+              disabled={isSubmitting}
+            >
+              <option value="">{loadingSlots ? 'Loading slots...' : (slotsMessage || 'Select time slot')}</option>
+              {availableSlots && availableSlots.length > 0 ? (
+                availableSlots.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))
+              ) : (
+                (!slotsMessage && !loadingSlots) && TIME_SLOTS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="booking-section">
+            <h3>Appointment Reasons</h3>
+            <select
+              className="booking-select"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              required
+              disabled={isSubmitting}
+            >
+              <option value="">Select reason</option>
+              {APPOINTMENT_REASONS.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+
+            {reason === 'Other' && (
+              <input
+                type="text"
                 className="booking-select"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
+                placeholder="Please specify"
+                value={otherReason}
+                onChange={(e) => setOtherReason(e.target.value)}
                 required
-              >
-                <option value="">{loadingSlots ? 'Loading slots...' : (slotsMessage || 'Select time slot')}</option>
-                {availableSlots && availableSlots.length > 0 ? (
-                  availableSlots.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))
-                ) : (
-                  // fallback to default TIME_SLOTS when API not available and no message
-                  (!slotsMessage && !loadingSlots) && TIME_SLOTS.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))
-                )}
-              </select>
-            </div>
-            <div className="booking-section">
-              <h3>Appointment Reasons</h3>
-              <select
-                className="booking-select"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                required
-              >
-                <option value="">Select reason</option>
-                {APPOINTMENT_REASONS.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            <div className="booking-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => navigate('/guest/login')}>
-                Back
-              </button>
-              <button type="submit" className="btn btn-blue">
-                Book Appointment
-              </button>
-            </div>
-          </form>
-        </div>
-      </AuthLayout>
+                disabled={isSubmitting}
+              />
+            )}
+          </div>
+
+          <div className="booking-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/guest/login')} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <Button type="submit" loading={isSubmitting} className="btn-blue">Book Appointment</Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

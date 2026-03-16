@@ -76,8 +76,8 @@ export default function GuestLogin() {
         try {
             localStorage.setItem('guestName', res.guest.name)
             localStorage.setItem('guestEmail', res.guest.email)
-            localStorage.setItem('guestUsername', res.guest.username)
             if (res.guest.id) localStorage.setItem('guestId', String(res.guest.id))
+            if (res.guest.contact) localStorage.setItem('guestContact', res.guest.contact)
         } catch (e) {}
           // After signup, go directly to guest dashboard
           navigate('/guest/dashboard', { state: { name: res.guest.name, guestId: res.guest.id } })
@@ -101,7 +101,8 @@ export default function GuestLogin() {
       try {
         localStorage.setItem('guestName', res.guest.name)
         localStorage.setItem('guestEmail', res.guest.email)
-        localStorage.setItem('guestUsername', res.guest.username)
+        localStorage.setItem('guestId', String(res.guest.id))
+        if (res.guest.contact) localStorage.setItem('guestContact', res.guest.contact)
       } catch (e) {}
       navigate('/guest/dashboard', { state: { name: res.guest.name } })
       const elapsed = Date.now() - start
