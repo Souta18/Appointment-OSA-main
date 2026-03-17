@@ -19,9 +19,86 @@ export default function StudentLanding() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [pendingCancelId, setPendingCancelId] = useState(null)
   const [cancelReasonInput, setCancelReasonInput] = useState('')
+  const [cancelReasonType, setCancelReasonType] = useState('')
   // details modal state (was missing and breaks rendering)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
+
+  // helper: display who cancelled the appointment (try localStorage for actual names)
+  const getCancelledByDisplay = (apt) => {
+    try {
+      if (!apt) return 'Unknown'
+      // check local overrides
+      try {
+        const rawOverrides = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
+        const overrides = rawOverrides ? JSON.parse(rawOverrides) : {}
+        if (overrides && apt.id && overrides[String(apt.id)]) {
+          const o = overrides[String(apt.id)]
+          return o.name || (o.by ? (o.by === 'admin' ? 'Admin' : (o.by === 'student' ? 'Student' : (o.by === 'guest' ? 'Guest' : 'Unknown'))) : 'Unknown')
+        }
+      } catch (e) {}
+      const explicitName = apt.cancelledByName || apt.cancelled_by_name || apt.cancelled_by_display || apt.cancelledBy || apt.adminName || apt.admin_name
+      if (explicitName) return String(explicitName)
+      const key = String(apt.cancelled_by || apt.cancelledBy || '').toLowerCase()
+      const note = String(apt.adminNote || apt.admin_note || '')
+      if (apt.admin && typeof apt.admin === 'object') {
+        const a = apt.admin
+        return a.name || a.fullName || a.full_name || a.username || 'Admin'
+      }
+      if (key === 'student') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('studentName')) || 'Student'
+      if (key === 'guest') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('guestName')) || 'Guest'
+      const re1 = /cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m1 = note.match(re1)
+      if (m1 && m1[1]) {
+        const extracted = m1[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+      const re2 = /was cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m2 = note.match(re2)
+      if (m2 && m2[1]) {
+        const extracted = m2[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+      if (key === 'admin') {
+        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || 'Admin' } } catch(e){}
+        return 'Admin'
+      }
+      if (key === 'system') return 'Admin'
+      if (/student/i.test(note)) return apt.name || 'Student'
+      if (/guest/i.test(note)) return apt.name || 'Guest'
+      if (/admin/i.test(note)) return (typeof window !== 'undefined' && (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username } } catch(e){} })()) || 'Admin'
+
+      if (apt.status === 'cancelled') {
+        if (apt.studentId || apt.studentId === 0) return 'Student'
+        if (apt.guest) return 'Guest'
+        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) return 'Admin' } catch (e) {}
+      }
+
+      return 'Unknown'
+    } catch (e) { return 'Unknown' }
+  }
+
+  const formatCancelledAt = (apt) => {
+    try {
+      if (!apt) return ''
+      const v = apt.cancelledAt || apt.cancelled_at || apt.cancelled_at_ts || apt.cancelled_at_iso || ''
+      if (!v) return ''
+      let d
+      if (typeof v === 'number') {
+        d = new Date(v)
+      } else if (/^\d+$/.test(String(v))) {
+        // numeric string: could be seconds (10) or ms (13)
+        const n = Number(v)
+        d = String(v).length === 10 ? new Date(n * 1000) : new Date(n)
+      } else {
+        d = new Date(String(v))
+      }
+      if (isNaN(d.getTime())) return ''
+      return d.toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    } catch (e) { return '' }
+  }
 
   const handleBookAppointment = async (data) => {
     // check ban for this student email
@@ -183,15 +260,41 @@ export default function StudentLanding() {
   const handleCancel = (id) => {
     setPendingCancelId(id)
     setCancelReasonInput('')
+    setCancelReasonType('')
     setShowCancelModal(true)
   }
 
   const confirmCancel = () => {
     const id = pendingCancelId
-    const reason = (cancelReasonInput || '').trim()
+    const type = (cancelReasonType || '').trim()
+    const otherText = (cancelReasonInput || '').trim()
+    // validation: reason type must be selected
+    if (!type) {
+      setConfirmType('error')
+      setShowConfirm(true)
+      setConfirmMessage('Please select a cancellation reason.')
+      setTimeout(() => setShowConfirm(false), 3000)
+      return
+    }
+    if (type === 'others' && !otherText) {
+      setConfirmType('error')
+      setShowConfirm(true)
+      setConfirmMessage('Please provide details for "Others".')
+      setTimeout(() => setShowConfirm(false), 3000)
+      return
+    }
+    const reasonMap = {
+      appointment_cancelled: 'Appointment cancelled',
+      class_conflict: 'Class conflict',
+      emergency: 'Emergency',
+      change_appointment: 'Change appointment',
+      others: otherText
+    }
+    const reason = (reasonMap[type] !== undefined) ? reasonMap[type] : otherText
     // Optimistically update local state
+    const cancelledTs = new Date().toISOString()
     const updated = appointments.map(a =>
-      a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, adminNote: 'Cancelled by student' } : a
+      a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, adminNote: 'Cancelled by student', cancelled_by: 'student', cancelledAt: cancelledTs, cancelled_at: cancelledTs } : a
     )
     setAppointments(updated)
     try {
@@ -203,6 +306,21 @@ export default function StudentLanding() {
       localStorage.setItem('notifications', JSON.stringify(arr))
     } catch (e) {}
 
+    // Update local appointment cache as well to reflect cancelled_by
+    try {
+      const raw = localStorage.getItem('appointments')
+      const arr = raw ? JSON.parse(raw) : []
+      const updatedArr = arr.map(a =>
+        a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'student' } : a
+      )
+      // if appointment not present in local cache, add the optimistic cancelled entry
+      if (!updatedArr.find(x => x && x.id === id)) {
+        const orig = appointments.find(a => a.id === id) || { id }
+        updatedArr.unshift({ ...orig, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'student' })
+      }
+      localStorage.setItem('appointments', JSON.stringify(updatedArr))
+    } catch (e) {}
+
     // Call backend to cancel and refresh
     (async () => {
       try {
@@ -211,6 +329,8 @@ export default function StudentLanding() {
       await loadAppointments()
       setShowCancelModal(false)
       setPendingCancelId(null)
+      setCancelReasonInput('')
+      setCancelReasonType('')
       setConfirmType('success')
       setShowConfirm(true)
       setConfirmType('error')
@@ -255,12 +375,42 @@ export default function StudentLanding() {
     try {
       const storedId = localStorage.getItem('studentId') || ''
       const email = localStorage.getItem('studentEmail') || ''
-      const res = await apiListAppointments()
-      if (!res.ok) {
-        // leave existing local appointments as-is
-        return
+      let serverApts = []
+      try {
+        const res = await apiListAppointments()
+        if (res && res.ok && Array.isArray(res.data)) {
+          serverApts = res.data || []
+          try { localStorage.setItem('appointments', JSON.stringify(serverApts)) } catch (e) {}
+        } else {
+          // API unreachable or returned unexpected shape -> fall back to local cache
+          const raw = localStorage.getItem('appointments')
+          serverApts = raw ? JSON.parse(raw) : []
+        }
+      } catch (e) {
+        const raw = localStorage.getItem('appointments')
+        serverApts = raw ? JSON.parse(raw) : []
       }
-      const serverApts = res.data || []
+      // Merge local cancellation overrides so optimistic local cancels remain visible
+      try {
+        const rawLocal = localStorage.getItem('appointments')
+        const localArr = rawLocal ? JSON.parse(rawLocal) : []
+        const localMap = {}
+        for (const la of localArr) {
+          if (!la || typeof la.id === 'undefined') continue
+          localMap[String(la.id)] = la
+        }
+        serverApts = (serverApts || []).map(sa => {
+          try {
+            const key = String(sa && sa.id)
+            const local = localMap[key]
+            if (local && ((local.status || '').toLowerCase() === 'cancelled' || local.status === 'cancelled')) {
+              // prefer local cancelled fields when backend hasn't reflected the change yet
+              return { ...sa, status: 'cancelled', cancelledAt: local.cancelledAt || local.cancelled_at || local.cancelled_at || '', cancelled_at: local.cancelledAt || local.cancelled_at || '', cancelReason: local.cancelReason || local.cancel_reason || local.cancelled_reason || '', cancel_reason: local.cancelReason || local.cancel_reason || '' , adminNote: local.adminNote || local.admin_note || sa.adminNote || sa.admin_note }
+            }
+          } catch (e) {}
+          return sa
+        })
+      } catch (e) {}
       // Helper: parse YYYY-MM-DD into a local Date to avoid timezone shifts
       const isoToLocalDateString = (iso) => {
         try {
@@ -275,7 +425,7 @@ export default function StudentLanding() {
       }
 
       // Map server shape to local appointment shape used in this component
-      const mapped = serverApts
+      const mapped = (serverApts || [])
         .filter(a => {
           // match by student number or email
           if (!a) return false
@@ -295,9 +445,11 @@ export default function StudentLanding() {
           studentEmail: a.email || '',
           name: `${a.firstName || ''} ${a.lastName || ''}`.trim() || '',
           studentId: a.studentId || '',
-          submittedAt: a.submittedAt || '',
-          cancelledAt: a.cancelledAt || '',
-          cancelReason: a.cancelReason || a.cancel_reason || '',
+          submittedAt: a.submittedAt || a.submitted_at || '',
+          // normalize cancelled timestamp (server may return cancelled_at or cancelledAt or a number)
+          cancelledAt: (typeof a.cancelledAt !== 'undefined' && a.cancelledAt) || (typeof a.cancelled_at !== 'undefined' && a.cancelled_at) || '',
+          // normalize cancel reason field
+          cancelReason: a.cancelReason || a.cancel_reason || a.cancelled_reason || '',
           adminNote: a.adminNote || a.admin_note || '',
           guest: !!a.guest
         }))
@@ -386,14 +538,14 @@ export default function StudentLanding() {
                   const s = (apt.status||'').toLowerCase()
                   const cardStatus = s === 'confirmed' ? 'rescheduled' : s
                   return (
-                  <div key={apt.id} className={`appointment-card card-${cardStatus}`}>
+                  <div key={apt.id} className={`appointment-card card-${cardStatus}`} onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true); }} style={{cursor:'pointer'}}>
                     <div className="apt-header">
                       <div className="apt-title-section">
                         <div className="apt-title">{apt.reason}</div>
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                        <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
                           {((apt.status||'').toLowerCase() === 'pending') ? 'Pending for approval' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : apt.status}
                         </span>
                         {(apt.status||'').toLowerCase() === 'pending' && (
@@ -432,8 +584,8 @@ export default function StudentLanding() {
                   <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
                   {selectedAppointment.studentId && <div className="details-id">Student ID: {selectedAppointment.studentId}</div>}
                 </div>
-                <div className={`details-status status-text ${((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) ? 'status-ongoing' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'status-approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'status-pending' : '')}`}>
-                  {((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : (isAppointmentOngoing(selectedAppointment) ? 'On Going' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'Approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'Pending' : selectedAppointment.status)}
+                <div className={`details-status status-text ${((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase())) ? 'status-ongoing' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'status-approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'status-pending' : ''}`}>
+                  {((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ? 'On Going' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'Approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'Pending' : selectedAppointment.status)}
                 </div>
               </div>
 
@@ -447,10 +599,24 @@ export default function StudentLanding() {
                 <p>{(selectedAppointment.iso || selectedAppointment.date) ? selectedAppointment.iso || selectedAppointment.date : ''}{selectedAppointment.start ? ' at ' + selectedAppointment.start : ''}{selectedAppointment.end ? ' to ' + selectedAppointment.end : ''}</p>
               </div>
 
-              {selectedAppointment.status === 'cancelled' && selectedAppointment.cancelReason && (
+              {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (selectedAppointment.cancelReason || selectedAppointment.cancel_reason || selectedAppointment.cancelled_reason) && (
                 <div className="details-section">
                   <h3>Cancellation reason:</h3>
-                  <p>{selectedAppointment.cancelReason}</p>
+                  <p>{selectedAppointment.cancelReason || selectedAppointment.cancel_reason || selectedAppointment.cancelled_reason}</p>
+                </div>
+              )}
+
+              {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (
+                <div className="details-section">
+                  <h3>Cancelled by:</h3>
+                  <p>{getCancelledByDisplay(selectedAppointment)}</p>
+                </div>
+              )}
+
+              {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (
+                <div className="details-section">
+                  <h3>Cancelled at:</h3>
+                  <p>{formatCancelledAt(selectedAppointment) || selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at_ts || selectedAppointment.cancelled_at_iso || '—'}</p>
                 </div>
               )}
 
@@ -464,6 +630,7 @@ export default function StudentLanding() {
               <div style={{display:'flex', justifyContent:'flex-end', marginTop:18}}>
                 <button className="close-btn" onClick={() => setDetailsOpen(false)}>Close</button>
               </div>
+              {/* Debug raw data removed */}
             </div>
           </div>
         )}
@@ -493,7 +660,7 @@ export default function StudentLanding() {
                   const s = (apt.status||'').toLowerCase()
                   const cardStatus = s === 'confirmed' ? 'rescheduled' : s
                   return (
-                  <div key={apt.id} className={`appointment-card card-${cardStatus}`}>
+                  <div key={apt.id} className={`appointment-card card-${cardStatus}`} onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true); }} style={{cursor:'pointer'}}>
                     <div className="apt-header">
                       <div className="apt-title-section">
                         <div className="apt-title">{apt.reason}</div>
@@ -523,7 +690,7 @@ export default function StudentLanding() {
                         )}
                     <div className="apt-footer">
                       {(apt.status||'').toLowerCase() === 'cancelled' ? (
-                        <span className="apt-submitted">Cancelled at: {apt.cancelledAt ? (new Date(apt.cancelledAt)).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}</span>
+                        <span className="apt-submitted">Cancelled at: {formatCancelledAt(apt) || (apt.date + ' at ' + apt.time)}</span>
                       ) : (
                         <span className="apt-submitted">Submitted on {apt.submittedAt ? (new Date(apt.submittedAt)).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}</span>
                       )}
@@ -564,10 +731,21 @@ export default function StudentLanding() {
         <div className="details-modal-overlay" onClick={cancelCancel}>
           <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:520}}>
             <h2>Cancel appointment</h2>
-            <p>Please tell us why you're cancelling (optional)</p>
-            <div style={{marginTop:12}}>
-              <textarea value={cancelReasonInput} onChange={e => setCancelReasonInput(e.target.value)} placeholder="Reason for cancelling (optional)" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-            </div>
+            <p>Please tell us why you're cancelling</p>
+                <div style={{marginTop:12}}>
+                  <label style={{display:'block', marginBottom:8}}>Cancellation Reason</label>
+                  <select value={cancelReasonType} onChange={e => setCancelReasonType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #e6e6e6'}}>
+                    <option value="" disabled>Select reason</option>
+                    <option value="appointment_cancelled">Appointment Cancelled</option>
+                    <option value="class_conflict">Class Conflict</option>
+                    <option value="emergency">Emergency</option>
+                    <option value="change_appointment">Change Date Appointment</option>
+                    <option value="others">Others</option>
+                  </select>
+                  {cancelReasonType === 'others' && (
+                    <textarea value={cancelReasonInput} onChange={e => setCancelReasonInput(e.target.value)} placeholder="Please provide cancellation details" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6', marginTop:12}} />
+                  )}
+                </div>
             <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
               <button className="close-btn" onClick={cancelCancel}>Back</button>
               <button className="decline-btn" onClick={confirmCancel}>Confirm Cancel</button>

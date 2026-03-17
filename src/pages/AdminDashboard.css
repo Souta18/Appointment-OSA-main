@@ -219,6 +219,10 @@
 .set-dated-btn{ background: #fff; border: 1px solid rgba(11,99,183,0.12); color: #0B63B7; padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer }
 .set-dated-btn:hover{ background: rgba(11,99,183,0.06) }
 
+/* Edit button used in dated availability rows */
+.edit-btn{ background: #fff; border: 1px solid rgba(11,99,183,0.12); color: #0B63B7; padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer; font-size:14px }
+.edit-btn:hover{ background: rgba(11,99,183,0.06) }
+
 .sidebar-card{
   position:relative;
   display:flex;
@@ -263,6 +267,9 @@
 .sidebar-card.status-cancelled .sidebar-card-icon{ background: #E06B6B; color:#fff }
 .sidebar-card.status-declined .sidebar-card-icon{ background: #E06B6B; color:#fff }
 .sidebar-card.status-done .sidebar-card-icon{ background: #28C03A; color:#fff }
+
+/* Force orange icon when appointment is ongoing regardless of base status */
+.sidebar-card.status-ongoing .sidebar-card-icon{ background: #FF9833 !important; color:#fff !important }
 
 .sidebar-card-info{ display:flex; flex-direction:column; flex:1; justify-content:flex-start; min-width:0 }
 .sidebar-card-name{ font-weight:600; font-size:20px; color:var(--text-dark); margin-top:36px; line-height:1.05; white-space:normal; overflow-wrap:break-word; word-break:break-word }

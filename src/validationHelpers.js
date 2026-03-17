@@ -60,15 +60,20 @@ export function validatePasswordMessage(password) {
 
 export function validatePhone(phone) {
   if (!phone) return true // Phone is optional
-  
-  // Simple phone validation - 7 to 15 digits
-  const phoneRegex = /^[0-9]{7,15}$/
-  return phoneRegex.test(phone.replace(/[\s-()]/g, ''))
+  const raw = String(phone).trim()
+  // Reject if contains letters or invalid characters
+  if (/[^0-9+\s()\-]/.test(raw)) return false
+  const cleaned = raw.replace(/[^0-9+]/g, '')
+  // Accept +63 or 63 (country code) followed by 9 or 10 digits, or local 09XXXXXXXXX (11 digits)
+  if (/^\+63\d{9,10}$/.test(cleaned)) return true
+  if (/^63\d{9,10}$/.test(cleaned)) return true
+  if (/^09\d{9}$/.test(cleaned)) return true
+  return false
 }
 
 export function validatePhoneMessage(phone) {
   if (!phone) return ''
-  if (!validatePhone(phone)) return 'Phone number must be 7-15 digits'
+  if (!validatePhone(phone)) return 'Phone number must be 11 digits (09XXXXXXXXX) or start with 63/+63 followed by 9–10 digits'
   return ''
 }
 
@@ -93,12 +98,13 @@ export function validateNameMessage(name, fieldName = 'Name', minLength = 2) {
 
 export function validateStudentNumber(studentNumber) {
   if (!studentNumber) return false
-  return studentNumber.trim().length >= 3
+  // Require format: four digits, a dash, then four digits (e.g. 2023-0000)
+  return /^\d{4}-\d{4}$/.test(String(studentNumber).trim())
 }
 
 export function validateStudentNumberMessage(studentNumber) {
   if (!studentNumber) return 'Student number is required'
-  if (studentNumber.trim().length < 3) return 'Student number must be at least 3 characters'
+  if (!/^\d{4}-\d{4}$/.test(String(studentNumber).trim())) return 'Student number must be in the format 0000-0000 (four digits, dash, four digits)'
   return ''
 }
 
@@ -203,29 +209,55 @@ export function validateImageFile(file) {
 
 export function validateStudentSignup(data) {
   const errors = {}
-  
-  if (!validateStudentNumber(data.studentNumber)) {
-    errors.studentNumber = validateStudentNumberMessage(data.studentNumber)
-  }
-  
+
+  // Order validations to match the visual layout of the signup form
+  // 1) First Name
   if (!validateName(data.firstName)) {
     errors.firstName = validateNameMessage(data.firstName, 'First Name')
   }
-  
+
+  // 2) Last Name
   if (!validateName(data.lastName)) {
     errors.lastName = validateNameMessage(data.lastName, 'Last Name')
   }
-  
-  if (!validateEmailMessage(data.email)) {
-    const msg = validateEmailMessage(data.email)
-    if (msg) errors.email = msg
+
+  // 3) Middle Name (optional) - validate if provided
+  if (data.middleName && !validateName(data.middleName)) {
+    errors.middleName = validateNameMessage(data.middleName, 'Middle Name')
   }
-  
+
+  // 4) Student Number
+  if (!validateStudentNumber(data.studentNumber)) {
+    errors.studentNumber = validateStudentNumberMessage(data.studentNumber)
+  }
+
+  // 5) Email
+  const emailMsg = validateEmailMessage(data.email)
+  if (emailMsg) errors.email = emailMsg
+
+  // 6) Contact
+  // 6) Contact (required)
+  if (!data.contact || String(data.contact).trim().length === 0) {
+    errors.contact = 'Contact number is required'
+  } else {
+    const phoneMsg = validatePhoneMessage(data.contact)
+    if (phoneMsg) {
+      errors.contact = phoneMsg
+    }
+  }
+
+  // 7) Course (required)
+  if (!data.course || data.course.trim().length === 0) {
+    errors.course = 'Course is required'
+  }
+
+  // 8) Password
   const pwdValidation = validatePassword(data.password)
   if (!pwdValidation.valid) {
     errors.password = pwdValidation.errors[0]
   }
-  
+
+  // 9) Confirm Password
   if (data.password !== data.confirmPassword) {
     errors.confirmPassword = 'Passwords do not match'
   }

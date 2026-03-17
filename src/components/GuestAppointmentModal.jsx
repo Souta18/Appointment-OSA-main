@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import './AppointmentModal.css'
-import { listAvailability } from '../api'
+import { listAvailability, listAppointments } from '../api'
 import Button from './Button'
 
 const APPOINTMENT_REASONS = [
@@ -18,6 +18,7 @@ export default function GuestAppointmentModal({ onClose, onSubmit, guestName = '
   const [otherReason, setOtherReason] = useState('')
   const [availability, setAvailability] = useState({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [bookedStarts, setBookedStarts] = useState([])
 
   useEffect(() => {
     listAvailability().then(resp => {
@@ -28,12 +29,39 @@ export default function GuestAppointmentModal({ onClose, onSubmit, guestName = '
     })
   }, [])
 
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const iso = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+        const res = await listAppointments()
+        if (res && res.ok) {
+          const existing = res.data || []
+          const booked = existing.filter(a => {
+            const apIso = a.iso || (a.date ? (typeof a.date === 'string' && a.date.length === 10 ? a.date : '') : '')
+            if (!apIso) return false
+            if (apIso !== iso) return false
+            if ((a.status || '').toLowerCase() === 'cancelled') return false
+            return true
+          }).map(a => (a.start || a.start_time || a.time || '').trim()).filter(Boolean)
+          setBookedStarts(booked)
+        } else {
+          setBookedStarts([])
+        }
+      } catch (e) {
+        setBookedStarts([])
+      }
+    })()
+  }, [date])
+
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
     'July', 'August', 'September', 'October', 'November', 'December']
   const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay()
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
   const blanks = Array(firstDay).fill(null)
+  
+  const today = new Date()
+  today.setHours(0,0,0,0)
 
   const prevMonth = () => {
     setDate(new Date(date.getFullYear(), date.getMonth() - 1))
@@ -83,17 +111,23 @@ export default function GuestAppointmentModal({ onClose, onSubmit, guestName = '
               </div>
               <div className="calendar-days">
                 {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
-                {days.map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={`day ${date.getDate() === d ? 'selected' : ''}`}
-                    onClick={() => setDate(new Date(date.getFullYear(), date.getMonth(), d))}
-                    disabled={isSubmitting}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {days.map(d => {
+                  const dateObj = new Date(date.getFullYear(), date.getMonth(), d)
+                  const dayIndex = dateObj.getDay()
+                  const isWeekend = (dayIndex === 0 || dayIndex === 6)
+                  const disabled = dateObj.setHours(0,0,0,0) < today.getTime() || isWeekend
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      className={`day ${date.getDate() === d ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
+                      onClick={() => !disabled && setDate(new Date(date.getFullYear(), date.getMonth(), d))}
+                      disabled={disabled}
+                    >
+                      {d}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -118,7 +152,8 @@ export default function GuestAppointmentModal({ onClose, onSubmit, guestName = '
                     return allRanges.map((r, idx) => {
                       const label = `${r.start} to ${r.end}`
                       const value = `${r.start}|${r.end}`
-                      return <option key={r.id ?? idx} value={value}>{label}</option>
+                      const isBooked = bookedStarts.some(bs => bs && r.start && bs === r.start.trim())
+                      return <option key={r.id ?? idx} value={value} disabled={isBooked}>{isBooked ? `${label} - Already Booked` : label}</option>
                     })
                   }
 

@@ -6,6 +6,7 @@ import Button from '../components/Button'
 import './AuthPages.css'
 import './StudentLogin.css'
 import { studentLogin, studentSignup } from '../api'
+import { validateStudentSignup } from '../validationHelpers'
 
 const VIEWS = { login: 'login', signup: 'signup', forgot: 'forgot' }
 
@@ -34,6 +35,8 @@ export default function StudentAuth() {
 
   const [loginError, setLoginError] = useState('')
   const [signupError, setSignupError] = useState('')
+  const [errors, setErrors] = useState({})
+  const [showValidation, setShowValidation] = useState(false)
   const loginTimer = useRef(null)
   const signupTimer = useRef(null)
   const loginLoadTimer = useRef(null)
@@ -101,6 +104,12 @@ export default function StudentAuth() {
     }
     if (signupError) setSignupError('')
     setSignupForm((p) => ({ ...p, [field]: value }))
+    setErrors(prev => {
+      const copy = { ...prev }
+      delete copy[field]
+      return copy
+    })
+    if (showValidation) setShowValidation(false)
   }
 
   function handleLoginChange(field, value) {
@@ -159,58 +168,26 @@ export default function StudentAuth() {
     e.preventDefault()
     setSignupError('')
     setLoginError('')
-    // Basic client-side validation
-    const first = (signupForm.firstName || '').trim()
-    const middle = (signupForm.middleName || '').trim()
-    const last = (signupForm.lastName || '').trim()
-    const studentNumber = (signupForm.studentNumber || '').trim()
-    const email = (signupForm.email || '').trim()
-    const contact = (signupForm.contact || '').trim()
-    const course = (signupForm.course || '').trim()
-    const password = signupForm.password || ''
-
-    if (!first && !middle && !last) {
-      setSignupErrorTimed('Please provide at least a first name or last name')
-      return
-    }
-    if (!email) {
-      setSignupErrorTimed('Email address is required')
-      return
-    }
-    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
-      setSignupErrorTimed('Invalid email format')
-      return
-    }
-    if (!contact) {
-      setSignupErrorTimed('Contact number is required')
-      return
-    }
-    if (!course) {
-      setSignupErrorTimed('Please select your course')
-      return
-    }
-    if (!password) {
-      setSignupErrorTimed('Password is required')
-      return
-    }
-    if (password.length < 8) {
-      setSignupErrorTimed('Password must be at least 8 characters')
-      return
-    }
-    if (!/[A-Z]/.test(password)) {
-      setSignupErrorTimed('Password must contain at least one uppercase letter')
-      return
-    }
-    if (!/[0-9]/.test(password)) {
-      setSignupErrorTimed('Password must contain at least one digit')
+    // Use centralized validation helper which returns ordered, field-level errors
+    const combined = validateStudentSignup({ ...signupForm, confirmPassword: signupForm.password })
+    if (!combined.valid) {
+      setErrors(combined.errors)
+      setShowValidation(true)
+      // show a single generic message to the user and auto-hide
+      setSignupErrorTimed('Fill up the requirement')
+      const firstKey = Object.keys(combined.errors)[0]
+      if (firstKey) {
+        const el = document.querySelector(`[name="${firstKey}"]`)
+        if (el && typeof el.focus === 'function') {
+          try { el.focus() } catch {}
+          try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch {}
+        }
+      }
       return
     }
 
-    const fullName = `${first || ''} ${middle ? `${middle} ` : ''}${last || ''}`.replace(/\s+/g, ' ').trim()
-    const payload = {
-      ...signupForm,
-      name: fullName
-    }
+    const fullName = `${(signupForm.firstName||'').trim()} ${(signupForm.middleName?`${signupForm.middleName.trim()} `:'')}${(signupForm.lastName||'').trim()}`.replace(/\s+/g,' ').trim()
+    const payload = { ...signupForm, name: fullName }
     let res
     const start = Date.now()
     try {
@@ -239,9 +216,12 @@ export default function StudentAuth() {
       } catch (e) {}
       navigate('/student/dashboard')
     } else {
-        // Show backend-provided error message and details when present
-        const detailsText = res?.details ? ` - ${JSON.stringify(res.details)}` : ''
-        setSignupError(res?.error ? `${res.error}${detailsText}` : 'Sign up failed')
+        // Show backend-provided error (or generic) and auto-hide
+        if (res?.error) {
+          setSignupErrorTimed(res.error)
+        } else {
+          setSignupErrorTimed('Sign up failed')
+        }
     }
   }
 
@@ -314,12 +294,13 @@ export default function StudentAuth() {
               <form onSubmit={handleSignupSubmit}>
                 <div className="signup-grid">
                   <div className="signup-grid-item">
-                    <Input
-                      label="First Name"
-                      placeholder="e.g. Juan *"
-                      value={signupForm.firstName}
-                      onChange={(e) => handleSignupChange('firstName', e.target.value)}
-                    />
+                      <Input
+                        label="First Name"
+                        placeholder="e.g. Juan *"
+                        value={signupForm.firstName}
+                        onChange={(e) => handleSignupChange('firstName', e.target.value)}
+                        error={errors.firstName || (showValidation && !signupForm.firstName)}
+                      />
                   </div>
                   <div className="signup-grid-item">
                     <Input
@@ -327,6 +308,7 @@ export default function StudentAuth() {
                       placeholder="e.g. Dela Cruz *"
                       value={signupForm.lastName}
                       onChange={(e) => handleSignupChange('lastName', e.target.value)}
+                      error={errors.lastName || (showValidation && !signupForm.lastName)}
                     />
                   </div>
                   <div className="signup-grid-item">
@@ -335,6 +317,7 @@ export default function StudentAuth() {
                       placeholder="e.g. Santos"
                       value={signupForm.middleName}
                       onChange={(e) => handleSignupChange('middleName', e.target.value)}
+                      error={errors.middleName}
                     />
                   </div>
                   <div className="signup-grid-item">
@@ -343,6 +326,7 @@ export default function StudentAuth() {
                       placeholder="e.g. 2023-0000 *"
                       value={signupForm.studentNumber}
                       onChange={(e) => handleSignupChange('studentNumber', e.target.value)}
+                      error={errors.studentNumber || (showValidation && !signupForm.studentNumber)}
                     />
                   </div>
                   <div className="signup-grid-item">
@@ -352,6 +336,7 @@ export default function StudentAuth() {
                       placeholder="e.g. student@gmail.com *"
                       value={signupForm.email}
                       onChange={(e) => handleSignupChange('email', e.target.value)}
+                      error={errors.email || (showValidation && !signupForm.email)}
                     />
                   </div>
                   <div className="signup-grid-item">
@@ -360,6 +345,7 @@ export default function StudentAuth() {
                       placeholder="e.g. 09XX XXX XXXX *"
                       value={signupForm.contact}
                       onChange={(e) => handleSignupChange('contact', e.target.value)}
+                      error={errors.contact || (showValidation && !signupForm.contact)}
                     />
                   </div>
                   <div className="signup-grid-item">
@@ -370,7 +356,7 @@ export default function StudentAuth() {
                         name="course"
                         value={signupForm.course}
                         onChange={(e) => handleSignupChange('course', e.target.value)}
-                        className="form-select"
+                        className={`form-select ${errors.course || (showValidation && !signupForm.course) ? 'form-select-error' : ''}`}
                       >
                         <option value="">Select your course</option>
                         <option value="BSCS">BSCS</option>
@@ -378,6 +364,7 @@ export default function StudentAuth() {
                         <option value="BEED">BEED</option>
                         <option value="BSHM">BSHM</option>
                       </select>
+                      {(errors.course || (showValidation && !signupForm.course)) && <p className="form-input-error-message">{errors.course || 'Course is required'}</p>}
                     </div>
                   </div>
                   <div className="signup-grid-item">
@@ -387,11 +374,17 @@ export default function StudentAuth() {
                       placeholder="e.g. •••••••• *"
                       value={signupForm.password}
                       onChange={(e) => handleSignupChange('password', e.target.value)}
+                      error={errors.password || (showValidation && !signupForm.password)}
                     />
                   </div>
                 </div>
-                {signupError && <div className="auth-error-submit">{signupError}</div>}
-                <Button type="submit" className="w-full" loading={isSubmitting}>Sign up</Button>
+                {/* Top signup error panel: show single timed message only */}
+                {signupError && (
+                  <div className="auth-error-submit">
+                    <div style={{fontWeight:700, marginBottom: 6}}>{signupError}</div>
+                  </div>
+                )}
+                 <Button type="submit" className="w-full" loading={isSubmitting}>Sign up</Button>
               </form>
               <p className="auth-footer">
                 Already have an account? <button type="button" className="link-button" onClick={() => setView(VIEWS.login)}>Sign in</button>

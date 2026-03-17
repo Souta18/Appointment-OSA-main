@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import './AppointmentModal.css'
-import { listAvailability } from '../api'
+import { listAvailability, listAppointments } from '../api'
 import Button from './Button'
 
 const APPOINTMENT_REASONS = [
@@ -24,6 +24,7 @@ export default function AppointmentModal({ onClose, onSubmit }) {
   const [otherReason, setOtherReason] = useState('')
   const [availability, setAvailability] = useState({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [bookedStarts, setBookedStarts] = useState([])
 
   useEffect(() => {
     listAvailability().then(resp => {
@@ -34,6 +35,31 @@ export default function AppointmentModal({ onClose, onSubmit }) {
       setAvailability({ Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] })
     })
   }, [])
+
+  useEffect(() => {
+    // Fetch appointments for the selected date to mark ranges unavailable
+    ;(async () => {
+      try {
+        const iso = isoLocal(date)
+        const res = await listAppointments()
+        if (res && res.ok) {
+          const existing = res.data || []
+          const booked = existing.filter(a => {
+            const apIso = a.iso || (a.date ? (typeof a.date === 'string' && a.date.length === 10 ? a.date : '') : '')
+            if (!apIso) return false
+            if (apIso !== iso) return false
+            if ((a.status || '').toLowerCase() === 'cancelled') return false
+            return true
+          }).map(a => (a.start || a.start_time || a.time || '').trim()).filter(Boolean)
+          setBookedStarts(booked)
+        } else {
+          setBookedStarts([])
+        }
+      } catch (e) {
+        setBookedStarts([])
+      }
+    })()
+  }, [date])
 
   // Helper: format a Date as local YYYY-MM-DD (avoid toISOString timezone shift)
   const isoLocal = (dt) => {
@@ -147,8 +173,9 @@ export default function AppointmentModal({ onClose, onSubmit }) {
                   if (allRanges.length > 0) {
                     return allRanges.map((r, idx) => {
                       const label = `${r.start} to ${r.end}`
-                      const value = `${r.start}|${r.end}`
-                      return <option key={r.id ?? idx} value={value}>{label}</option>
+                          const value = `${r.start}|${r.end}`
+                          const isBooked = bookedStarts.some(bs => bs && r.start && bs === r.start.trim())
+                          return <option key={r.id ?? idx} value={value} disabled={isBooked}>{isBooked ? `${label} - Already Booked` : label}</option>
                     })
                   }
 

@@ -138,7 +138,7 @@ export async function listAppointments() {
   }
 }
 
-export async function updateAppointmentStatus(id, status, extra = {}) {
+export async function updateAppointmentStatus(id, status, extra = {}, includeAuth = false) {
   try {
     if (!id || !status) {
       return { ok: false, error: 'Missing appointment ID or status' }
@@ -146,7 +146,7 @@ export async function updateAppointmentStatus(id, status, extra = {}) {
     
     const r = await fetch(`${base}/api/appointments/${id}`, {
       method: 'PATCH',
-      headers: getHeaders(),
+      headers: getHeaders(includeAuth),
       body: JSON.stringify({ status, ...extra })
     })
     
@@ -259,7 +259,7 @@ export async function studentSignup(payload) {
 export async function studentLogin(ident, password) {
   try {
     if (!ident || !password) {
-      return { ok: false, error: 'Please enter your student number/email and password' }
+      return { ok: false, error: 'Please enter your student number and password' }
     }
     
     const r = await fetch(`${base}/api/student/login`, {
@@ -271,7 +271,7 @@ export async function studentLogin(ident, password) {
     const data = await r.json()
     
     if (!r.ok || !data.ok) {
-      return { ok: false, error: data.error || 'Invalid student number/email or password' }
+      return { ok: false, error: data.error || 'Invalid student number or password' }
     }
     
     // Store student token if returned

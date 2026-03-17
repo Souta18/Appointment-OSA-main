@@ -42,10 +42,13 @@ export default function GuestBooking() {
   }
   
   const [date, setDate] = useState(new Date())
+  const today = new Date()
+  today.setHours(0,0,0,0)
   const [time, setTime] = useState('')
   const [reason, setReason] = useState('')
   const [otherReason, setOtherReason] = useState('')
   const [availableSlots, setAvailableSlots] = useState([])
+  const [bookedTimes, setBookedTimes] = useState([])
   const [slotsMessage, setSlotsMessage] = useState('')
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -126,6 +129,29 @@ export default function GuestBooking() {
     }
 
     loadSlots()
+    // Also fetch existing appointments for this date so we can mark booked times
+    ;(async () => {
+      try {
+        const iso = date.toISOString().split('T')[0]
+        const res = await apiListAppointments()
+        if (res && res.ok) {
+          const existing = res.data || []
+          const booked = existing.filter(a => {
+            if (!a) return false
+            const apIso = a.iso || (a.date ? (typeof a.date === 'string' && a.date.length === 10 ? a.date : '') : '')
+            if (!apIso) return false
+            if (apIso !== iso) return false
+            if ((a.status || '').toLowerCase() === 'cancelled') return false
+            return true
+          }).map(a => (a.start || a.start_time || a.time || '').trim()).filter(Boolean)
+          setBookedTimes(booked)
+        } else {
+          setBookedTimes([])
+        }
+      } catch (e) {
+        setBookedTimes([])
+      }
+    })()
   }, [date])
 
   const handleSubmit = (e) => {
@@ -289,17 +315,25 @@ export default function GuestBooking() {
               </div>
               <div className="calendar-days">
                 {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
-                {days.map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={`day ${date.getDate() === d ? 'selected' : ''}`}
-                    onClick={() => setDate(new Date(date.getFullYear(), date.getMonth(), d))}
-                    disabled={isSubmitting}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {days.map(d => {
+                  const dayDate = new Date(date.getFullYear(), date.getMonth(), d)
+                  dayDate.setHours(0,0,0,0)
+                  const dayIndex = dayDate.getDay()
+                  const isWeekend = (dayIndex === 0 || dayIndex === 6)
+                  const isPast = dayDate < today
+                  const disabled = isPast || isWeekend
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      className={`day ${date.getDate() === d ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
+                      onClick={() => !disabled && setDate(new Date(date.getFullYear(), date.getMonth(), d))}
+                      disabled={isSubmitting || disabled}
+                    >
+                      {d}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -315,13 +349,17 @@ export default function GuestBooking() {
             >
               <option value="">{loadingSlots ? 'Loading slots...' : (slotsMessage || 'Select time slot')}</option>
               {availableSlots && availableSlots.length > 0 ? (
-                availableSlots.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))
+                availableSlots.map(t => {
+                  const label = String(t || '').trim()
+                  const isBooked = bookedTimes.includes(label)
+                  return <option key={label} value={label} disabled={isBooked}>{isBooked ? `${label} - Already Booked` : label}</option>
+                })
               ) : (
-                (!slotsMessage && !loadingSlots) && TIME_SLOTS.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))
+                (!slotsMessage && !loadingSlots) && TIME_SLOTS.map(t => {
+                  const label = String(t).trim()
+                  const isBooked = bookedTimes.includes(label)
+                  return <option key={label} value={label} disabled={isBooked}>{isBooked ? `${label} - Already Booked` : label}</option>
+                })
               )}
             </select>
           </div>

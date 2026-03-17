@@ -19,9 +19,66 @@ export default function GuestDashboard() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [pendingCancelId, setPendingCancelId] = useState(null)
   const [cancelReasonInput, setCancelReasonInput] = useState('')
+  const [cancelReasonType, setCancelReasonType] = useState('')
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [showBookingModal, setShowBookingModal] = useState(false)
+
+  // helper: display who cancelled the appointment (try localStorage for actual names)
+  const getCancelledByDisplay = (apt) => {
+    try {
+      if (!apt) return 'Unknown'
+      // check local overrides
+      try {
+        const rawOverrides = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
+        const overrides = rawOverrides ? JSON.parse(rawOverrides) : {}
+        if (overrides && apt.id && overrides[String(apt.id)]) {
+          const o = overrides[String(apt.id)]
+          return o.name || (o.by ? (o.by === 'admin' ? 'Admin' : (o.by === 'student' ? 'Student' : (o.by === 'guest' ? 'Guest' : 'Unknown'))) : 'Unknown')
+        }
+      } catch (e) {}
+      const explicitName = apt.cancelledByName || apt.cancelled_by_name || apt.cancelled_by_display || apt.cancelledBy || apt.adminName || apt.admin_name
+      if (explicitName) return String(explicitName)
+      const key = String(apt.cancelled_by || apt.cancelledBy || '').toLowerCase()
+      const note = String(apt.adminNote || apt.admin_note || '')
+      if (apt.admin && typeof apt.admin === 'object') {
+        const a = apt.admin
+        return a.name || a.fullName || a.full_name || a.username || 'Admin'
+      }
+      if (key === 'student') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('studentName')) || 'Student'
+      if (key === 'guest') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('guestName')) || 'Guest'
+      const re1 = /cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m1 = note.match(re1)
+      if (m1 && m1[1]) {
+        const extracted = m1[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+      const re2 = /was cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m2 = note.match(re2)
+      if (m2 && m2[1]) {
+        const extracted = m2[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+      if (key === 'admin') {
+        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || 'Admin' } } catch(e){}
+        return 'Admin'
+      }
+      if (key === 'system') return 'Admin'
+      if (/student/i.test(note)) return apt.name || 'Student'
+      if (/guest/i.test(note)) return apt.name || 'Guest'
+      if (/admin/i.test(note)) return (typeof window !== 'undefined' && (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username } } catch(e){} })()) || 'Admin'
+
+      if (apt.status === 'cancelled') {
+        if (apt.studentId || apt.studentId === 0) return 'Student'
+        if (apt.guest) return 'Guest'
+        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) return 'Admin' } catch (e) {}
+      }
+
+      return 'Unknown'
+    } catch (e) { return 'Unknown' }
+  }
 
   // Helper: convert time like "9:30 AM" to minutes since midnight, or null
   const toMinutes = (t) => {
@@ -190,9 +247,33 @@ export default function GuestDashboard() {
       const email = guestEmail || localStorage.getItem('guestEmail') || ''
       const rawApts = localStorage.getItem('appointments')
       const localApts = rawApts ? JSON.parse(rawApts) : []
-      
+
+      // Try loading from backend API first; fall back to localStorage when API unavailable
+      let serverApts = []
+      try {
+        const res = await apiListAppointments()
+        if (res && res.ok && Array.isArray(res.data)) serverApts = res.data
+      } catch (e) {
+        serverApts = []
+      }
+
+      // If the API call succeeded (even if it returned an empty array), treat
+      // server data as authoritative and do NOT include local-only entries.
+      // If the API was unreachable, fall back to localStorage data.
+      const serverLoaded = Array.isArray(serverApts) || (serverApts && serverApts.length === 0)
+      let allApts = []
+      if (serverLoaded) {
+        allApts = serverApts || []
+        try {
+          // overwrite local cache with server state to remove stale local-only entries
+          localStorage.setItem('appointments', JSON.stringify(allApts))
+        } catch (e) {}
+      } else {
+        allApts = localApts || []
+      }
+
       // Filter appointments for this guest
-      const guestApts = localApts.filter(a => {
+      const guestApts = allApts.filter(a => {
         const aEmail = a.email || a.studentEmail || ''
         return a.guest && email && aEmail && aEmail.toLowerCase() === email.toLowerCase()
       })
@@ -244,16 +325,43 @@ export default function GuestDashboard() {
   const handleCancel = (id) => {
     setPendingCancelId(id)
     setCancelReasonInput('')
+    setCancelReasonType('')
     setShowCancelModal(true)
   }
 
   const confirmCancel = () => {
     const id = pendingCancelId
-    const reason = (cancelReasonInput || '').trim()
-    
+    const type = (cancelReasonType || '').trim()
+    const otherText = (cancelReasonInput || '').trim()
+
+    // validation: require a reason type; if 'others' require details
+    if (!type) {
+      setConfirmType('error')
+      setShowConfirm(true)
+      setConfirmMessage('Please select a cancellation reason.')
+      setTimeout(() => setShowConfirm(false), 3000)
+      return
+    }
+    if (type === 'others' && !otherText) {
+      setConfirmType('error')
+      setShowConfirm(true)
+      setConfirmMessage('Please provide details for "Others".')
+      setTimeout(() => setShowConfirm(false), 3000)
+      return
+    }
+
+    const reasonMap = {
+      appointment_cancelled: 'Appointment cancelled',
+      class_conflict: 'Class conflict',
+      emergency: 'Emergency',
+      change_appointment: 'Change appointment',
+      others: otherText
+    }
+    const reason = reasonMap[type] !== undefined ? reasonMap[type] : otherText
+
     // Optimistically update local state
     const updated = appointments.map(a =>
-      a.id === id ? { ...a, status: 'cancelled', cancelReason: reason } : a
+      a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, cancelled_by: 'guest', cancelledAt: new Date().toISOString() } : a
     )
     setAppointments(updated)
     
@@ -264,7 +372,7 @@ export default function GuestDashboard() {
       
       // Update local storage
       const updatedArr = arr.map(a =>
-        a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, cancelledAt: new Date().toISOString() } : a
+        a.id === id ? { ...a, status: 'cancelled', cancelReason: reason, cancelledAt: new Date().toISOString(), cancelled_by: 'guest' } : a
       )
       localStorage.setItem('appointments', JSON.stringify(updatedArr))
 
@@ -274,10 +382,12 @@ export default function GuestDashboard() {
       } catch (e) {}
 
       setShowCancelModal(false)
+      setCancelReasonType('')
+      setCancelReasonInput('')
       setPendingCancelId(null)
-      setConfirmType('success')
+      setConfirmType('error')
       setShowConfirm(true)
-      setConfirmMessage('Appointment cancelled successfully')
+      setConfirmMessage('Appointment cancelled')
       setTimeout(() => setShowConfirm(false), 3000)
     } catch (e) {
       setConfirmType('error')
@@ -290,6 +400,7 @@ export default function GuestDashboard() {
   const cancelCancel = () => {
     setShowCancelModal(false)
     setPendingCancelId(null)
+    setCancelReasonType('')
   }
 
   const handleViewDetails = (apt) => {
@@ -310,17 +421,14 @@ export default function GuestDashboard() {
     return () => clearInterval(id)
   }, [guestEmail])
 
-  const pendingAppointments = appointments.filter(a => 
-    (a.status || '').toLowerCase() !== 'cancelled' && 
-    (a.status || '').toLowerCase() !== 'done' && 
-    (a.status || '').toLowerCase() !== 'completed'
-  )
-  
-  const completedAppointments = appointments.filter(a => 
-    (a.status || '').toLowerCase() === 'done' || 
-    (a.status || '').toLowerCase() === 'completed' ||
-    (a.status || '').toLowerCase() === 'cancelled'
-  )
+  // Only show truly pending requests in "My Appointments"
+  const pendingAppointments = appointments.filter(a => (a.status || '').toLowerCase() === 'pending')
+
+  // Treat approved/confirmed/rescheduled/declined/done/completed/cancelled as history
+  const completedAppointments = appointments.filter(a => {
+    const s = (a.status || '').toLowerCase()
+    return ['done', 'completed', 'cancelled', 'approved', 'confirmed', 'rescheduled', 'declined'].includes(s)
+  })
 
   return (
     <div className="guest-dashboard">
@@ -395,7 +503,7 @@ export default function GuestDashboard() {
                           <div className="apt-datetime">{apt.date} at {apt.time}</div>
                         </div>
                         <div className="apt-header-actions">
-                          <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                          <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
                             {(apt.status === 'pending') ? 'Pending for approval' : 
                              (apt.status === 'approved') ? 'Approved' : 
                              (apt.status === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : 
@@ -432,43 +540,7 @@ export default function GuestDashboard() {
           </div>
         </section>
 
-        {completedAppointments.length > 0 && (
-          <section className="appointments-section">
-            <div className="section-header">
-              <h2>Appointment History</h2>
-            </div>
-            <div className="section-divider" />
-            <div className="appointments-content">
-              <div className="appointment-cards">
-                {completedAppointments.map(apt => {
-                  const s = (apt.status || '').toLowerCase()
-                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
-                  return (
-                    <div
-                      key={apt.id}
-                      className={`appointment-card card-${cardStatus}`}
-                      onClick={() => handleViewDetails(apt)}
-                      style={{ cursor: 'pointer', opacity: 0.8 }}
-                    >
-                      <div className="apt-header">
-                        <div className="apt-title-section">
-                          <div className="apt-title">{apt.reason}</div>
-                          <div className="apt-datetime">{apt.date} at {apt.time}</div>
-                        </div>
-                        <div className="apt-header-actions">
-                          <span className={`status-text status-${cardStatus}`}>
-                            {(apt.status === 'done' || apt.status === 'completed') ? 'Completed' : 
-                             (apt.status === 'cancelled') ? 'Cancelled' : apt.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
-        )}
+        
 
         <section className="history-section">
           <div className="section-header">
@@ -479,7 +551,7 @@ export default function GuestDashboard() {
           </div>
           <div className="section-divider" />
           <div className="history-content">
-            {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').length === 0 ? (
+            {completedAppointments.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon history-icon">
                   <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -491,7 +563,7 @@ export default function GuestDashboard() {
               </div>
             ) : (
               <div className="appointment-cards">
-                {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').map(apt => {
+                {completedAppointments.map(apt => {
                   const s = (apt.status||'').toLowerCase()
                   const cardStatus = s === 'confirmed' ? 'rescheduled' : s
                   return (
@@ -502,7 +574,7 @@ export default function GuestDashboard() {
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                        <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
                           {((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : apt.status}
                         </span>
                       </div>
@@ -515,6 +587,12 @@ export default function GuestDashboard() {
                       <div className="apt-cancel-section">
                         <div className="apt-cancel-label">Cancellation reason:</div>
                         <div className="apt-cancel-text">{apt.cancelReason}</div>
+                      </div>
+                    )}
+                    {(apt.status||'').toLowerCase() === 'cancelled' && (
+                      <div className="apt-cancel-section">
+                        <div className="apt-cancel-label">Cancelled by:</div>
+                        <div className="apt-cancel-text">{getCancelledByDisplay(apt)}</div>
                       </div>
                     )}
                     {(apt.status||'').toLowerCase() === 'declined' && apt.adminNote && (
@@ -545,9 +623,9 @@ export default function GuestDashboard() {
                 <div className="details-main">
                   <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
                 </div>
-                <div className={`details-status status-text ${(selectedAppointment.status === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) ? 'status-ongoing' : (selectedAppointment.status === 'approved') ? 'status-approved' : (selectedAppointment.status === 'pending') ? 'status-pending' : '')}`}>
+                <div className={`details-status status-text ${(selectedAppointment.status === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ) ? 'status-ongoing' : (selectedAppointment.status === 'approved') ? 'status-approved' : (selectedAppointment.status === 'pending') ? 'status-pending' : ''}`}>
                   {(selectedAppointment.status === 'cancelled') ? 'Cancelled' : 
-                   (isAppointmentOngoing(selectedAppointment) ? 'On Going' : 
+                   (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ? 'On Going' : 
                     (selectedAppointment.status === 'approved') ? 'Approved' : 
                     (selectedAppointment.status === 'pending') ? 'Pending' : 
                     selectedAppointment.status)}
@@ -589,14 +667,20 @@ export default function GuestDashboard() {
           <div className="details-modal-overlay" onClick={cancelCancel}>
             <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:520}}>
               <h2>Cancel appointment</h2>
-              <p>Please tell us why you're cancelling (optional)</p>
+              <p>Please tell us why you're cancelling</p>
               <div style={{marginTop:12}}>
-                <textarea
-                  value={cancelReasonInput}
-                  onChange={e => setCancelReasonInput(e.target.value)}
-                  placeholder="Reason for cancelling (optional)"
-                  style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6'}}
-                />
+                <label style={{display:'block', marginBottom:8}}>Cancellation Reason</label>
+                <select value={cancelReasonType} onChange={e => setCancelReasonType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #e6e6e6'}}>
+                  <option value="" disabled>Select reason</option>
+                  <option value="appointment_cancelled">Appointment Cancelled</option>
+                  <option value="class_conflict">Class Conflict</option>
+                  <option value="emergency">Emergency</option>
+                  <option value="change_appointment">Change Date Appointment</option>
+                  <option value="others">Others</option>
+                </select>
+                {cancelReasonType === 'others' && (
+                  <textarea value={cancelReasonInput} onChange={e => setCancelReasonInput(e.target.value)} placeholder="Please provide cancellation details" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6', marginTop:12}} />
+                )}
               </div>
               <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
                 <button className="close-btn" onClick={cancelCancel}>Back</button>

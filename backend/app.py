@@ -4,7 +4,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 import os
 import base64
 import uuid
@@ -212,6 +212,13 @@ def create_app():
             if "admin_note" not in existing:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN admin_note VARCHAR(500) NULL"))
                 conn.commit()
+            # Add created_by and cancelled_by columns to track actor where missing
+            if "created_by" not in existing:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN created_by VARCHAR(20) NULL"))
+                conn.commit()
+            if "cancelled_by" not in existing:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN cancelled_by VARCHAR(20) NULL"))
+                conn.commit()
 
     _ensure_appointments_cancelled_at_column()
 
@@ -244,6 +251,39 @@ def create_app():
                 conn.execute(text(f"ALTER TABLE appointments {', '.join(add)}"))
 
     _ensure_appointments_reschedule_columns()
+
+    def _expire_pending_student_guest_appointments():
+        """Expire pending appointments created by students or guests after 24 hours."""
+        try:
+            cutoff = datetime.utcnow() - timedelta(hours=24)
+            with SessionLocal() as s:
+                rows = s.execute(
+                    select(Appointment).where(
+                        (Appointment.status == 'pending') &
+                        (Appointment.created_by.in_(['student', 'guest'])) &
+                        (Appointment.created_at < cutoff)
+                    )
+                ).scalars().all()
+                if not rows:
+                    return
+                for obj in rows:
+                    obj.status = 'cancelled'
+                    obj.cancelled_at = datetime.utcnow()
+                    obj.cancelled_by = 'system'
+                    try:
+                        obj.cancel_reason = 'Pending expired after 24 hours'
+                    except Exception:
+                        pass
+                    obj.reschedule_requested = False
+                    obj.reschedule_date = None
+                    obj.reschedule_start_time = None
+                    obj.reschedule_end_time = None
+                    obj.reschedule_reason = None
+                    s.add(obj)
+                s.commit()
+        except Exception:
+            # don't let expiry failures block API responses
+            pass
 
     @app.get("/api/health")
     def health():
@@ -293,27 +333,61 @@ def create_app():
         password = body.get("password") or ""
         course = (body.get("course") or "").strip()
         
-        # Validate required fields
-        if not student_number:
-            return error_response("Student number is required", 400)
-        if not email:
-            return error_response("Email is required", 400)
-        if not password:
-            return error_response("Password is required", 400)
-        
-        # Validate email format
-        if not validate_email(email):
-            return error_response("Invalid email format", 400)
-        
-        # Validate password strength
-        pwd_valid, pwd_msg = validate_password_strength(password)
-        if not pwd_valid:
-            return error_response(pwd_msg, 400)
+        # Server-side ordered, field-level validation (matches frontend order)
+        errors = {}
 
-        # Validate course if provided
-        if course:
+        # 1) First Name (required)
+        if not first_name or len(first_name.strip()) < 2:
+            errors['firstName'] = 'First Name is required and must be at least 2 characters'
+
+        # 2) Last Name (required)
+        if not last_name or len(last_name.strip()) < 2:
+            errors['lastName'] = 'Last Name is required and must be at least 2 characters'
+
+        # 3) Middle Name (optional) - if provided, ensure reasonable length
+        if middle_name and len(middle_name.strip()) < 2:
+            errors['middleName'] = 'Middle Name must be at least 2 characters when provided'
+
+        # 4) Student Number
+        if not student_number:
+            errors['studentNumber'] = 'Student number is required'
+        else:
+            if not re.match(r'^\d{4}-\d{4}$', student_number):
+                errors['studentNumber'] = 'Student number must be in the format 0000-0000'
+
+        # 5) Email
+        if not email:
+            errors['email'] = 'Email is required'
+        else:
+            if not validate_email(email):
+                errors['email'] = 'Invalid email format'
+
+        # 6) Contact (required)
+        if not contact or len(contact.strip()) == 0:
+            errors['contact'] = 'Contact number is required'
+        else:
+            cleaned = re.sub(r'[\s()\-]', '', contact)
+            if not (re.match(r'^\+63\d{10}$', cleaned) or re.match(r'^09\d{9}$', cleaned)):
+                errors['contact'] = 'Contact number must be 09XXXXXXXXX or +63XXXXXXXXXX format'
+
+        # 7) Course (required)
+        if not course or not course.strip():
+            errors['course'] = 'Course is required'
+        else:
             if course not in VALID_COURSES:
-                return error_response(f"Invalid course. Must be one of: {', '.join(sorted(VALID_COURSES))}", 400)
+                errors['course'] = f"Invalid course. Must be one of: {', '.join(sorted(VALID_COURSES))}"
+
+        # 8) Password
+        if not password:
+            errors['password'] = 'Password is required'
+        else:
+            pwd_valid, pwd_msg = validate_password_strength(password)
+            if not pwd_valid:
+                errors['password'] = pwd_msg
+
+        # If any validation errors, return them in an ordered, field-level details object
+        if errors:
+            return error_response('Validation failed', 400, details=errors)
         
         if not name:
             combined = f"{first_name} {middle_name + ' ' if middle_name else ''}{last_name}".strip()
@@ -643,6 +717,12 @@ def create_app():
 
         weekday = dt_date.strftime("%A")
 
+        # expire stale pending appointments created by students/guests
+        try:
+            _expire_pending_student_guest_appointments()
+        except Exception:
+            pass
+
         with SessionLocal() as s:
             # avail rows that apply: either date-specific for this date, or general by weekday
             rows = s.execute(
@@ -872,6 +952,11 @@ def create_app():
     @app.get("/api/appointments")
     def list_appointments():
         try:
+            # expire stale pending appointments before listing
+            try:
+                _expire_pending_student_guest_appointments()
+            except Exception:
+                pass
             with SessionLocal() as s:
                 stmt = select(Appointment, Student).outerjoin(Student, Appointment.student_id == Student.id).order_by(Appointment.id.desc())
                 rows = s.execute(stmt).all()
@@ -879,6 +964,9 @@ def create_app():
                 for r, stu in rows:
                     # Build full display name from student record when possible
                     full_name = ""
+                    guest_name = ""
+                    guest_email = ""
+
                     if stu:
                         if getattr(stu, 'name', None):
                             full_name = stu.name
@@ -886,8 +974,17 @@ def create_app():
                             parts = [p for p in [(stu.first_name or ""), (stu.middle_name or ""), (stu.last_name or "")] if p]
                             full_name = " ".join(parts)
                     else:
-                        # fallback: try guest name or empty
-                        full_name = getattr(r, 'guest', None) and getattr(r.guest, 'name', '') or ""
+                        # If appointment is linked to a guest, prefer guest's name/email
+                        try:
+                            if getattr(r, 'guest', None):
+                                guest_name = getattr(r.guest, 'name', '') or ''
+                                guest_email = getattr(r.guest, 'email', '') or ''
+                        except Exception:
+                            guest_name = ''
+                            guest_email = ''
+                        full_name = guest_name or ""
+
+                    email_field = (stu.email if stu else guest_email) or ""
 
                     out.append({
                         "id": r.id,
@@ -897,11 +994,9 @@ def create_app():
                         "firstName": (stu.first_name if stu else "") or "",
                         "middleName": (stu.middle_name if stu else "") or "",
                         "lastName": (stu.last_name if stu else "") or "",
-                        # Return the student's DB primary key here so frontend stored
-                        # `studentId` (which contains the DB id) matches the server
-                        # response and client-side filtering works correctly.
+                        # studentId: keep returning the student number when available
                         "studentId": (stu.student_id if stu else (r.student_id or "")) or "",
-                        "email": (stu.email if stu else "") or "",
+                        "email": email_field,
                         "reason": r.reason,
                         "iso": r.date.isoformat() if r.date else "",
                         "date": (r.date.isoformat() if r.date else ""),
@@ -981,6 +1076,12 @@ def create_app():
 
         # Resolve student: accept either DB primary key or student number string
         student_id = None
+
+        # expire stale pending appointments before creating/checking slots
+        try:
+            _expire_pending_student_guest_appointments()
+        except Exception:
+            pass
 
         with SessionLocal() as s:
             # try numeric primary key first if provided
@@ -1085,6 +1186,18 @@ def create_app():
                 if conflicts and (student_id or guest_id or guest):
                     return error_response("This time slot has a scheduling conflict", 400)
                 
+                # Determine creator: admin if admin token present, otherwise student/guest
+                token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
+                if token:
+                    created_by = 'admin'
+                else:
+                    if student_id:
+                        created_by = 'student'
+                    elif guest_id or is_walkin or guest:
+                        created_by = 'guest'
+                    else:
+                        created_by = None
+
                 a = Appointment(
                     reason=reason,
                     status=status,
@@ -1095,6 +1208,11 @@ def create_app():
                     end_time=et,
                     is_walkin=is_walkin
                 )
+                # record how this appointment was created
+                try:
+                    a.created_by = created_by
+                except Exception:
+                    pass
                 s.add(a)
                 s.flush()
                 s.commit()
@@ -1110,6 +1228,9 @@ def create_app():
         
         body = request.get_json(force=True) or {}
         
+        token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
+        is_admin_action = bool(token)
+
         with SessionLocal() as s:
             try:
                 obj = s.get(Appointment, apt_id)
@@ -1129,6 +1250,17 @@ def create_app():
                         from datetime import datetime as _dt
                         obj.status = 'cancelled'
                         obj.cancelled_at = _dt.utcnow()
+                        # who cancelled
+                        if is_admin_action:
+                            obj.cancelled_by = 'admin'
+                        else:
+                            # infer from appointment linkage
+                            if getattr(obj, 'student_id', None):
+                                obj.cancelled_by = 'student'
+                            elif getattr(obj, 'guest_id', None) or getattr(obj, 'is_walkin', False):
+                                obj.cancelled_by = 'guest'
+                            else:
+                                obj.cancelled_by = 'unknown'
                         # record optional cancellation reason if provided
                         cr = body.get('cancelReason') or body.get('cancel_reason') or ''
                         if cr:
@@ -1136,6 +1268,13 @@ def create_app():
                                 obj.cancel_reason = str(cr)[:500]
                             except Exception:
                                 obj.cancel_reason = ''
+                        # If cancelled by non-admin, clear any reschedule requests and forbid rescheduling
+                        if getattr(obj, 'cancelled_by', None) and obj.cancelled_by != 'admin':
+                            obj.reschedule_requested = False
+                            obj.reschedule_date = None
+                            obj.reschedule_start_time = None
+                            obj.reschedule_end_time = None
+                            obj.reschedule_reason = None
                     else:
                         # clear cancelled_at when setting other statuses
                         obj.status = status
@@ -1164,6 +1303,10 @@ def create_app():
 
                 # If client is requesting a reschedule proposal
                 if any([res_date_raw, res_start_raw, res_end_raw, res_reason]):
+                    # If appointment was cancelled by non-admin, block reschedule proposals
+                    if getattr(obj, 'status', '') == 'cancelled' and getattr(obj, 'cancelled_by', None) and obj.cancelled_by != 'admin':
+                        return error_response("Cannot request reschedule: appointment cancelled by student/guest", 400)
+
                     # Parse date
                     parsed_res_date = None
                     try:
@@ -1183,6 +1326,58 @@ def create_app():
                     if parsed_res_date and parsed_res_date < datetime.utcnow().date():
                         return error_response("Cannot request reschedule to a past date", 400)
 
+                    # Require full proposal values (date, start and end)
+                    if not (parsed_res_date and parsed_res_start and parsed_res_end):
+                        return error_response("Reschedule request must include date, start time and end time", 400)
+
+                    # Check availability for the requested date/time
+                    try:
+                        weekday = parsed_res_date.strftime("%A")
+                        avail_rows = s.execute(
+                            select(Availability).where(
+                                ((Availability.date == parsed_res_date)) | ((Availability.day == weekday) & (Availability.date == None))
+                            )
+                        ).scalars().all()
+                    except Exception:
+                        avail_rows = []
+
+                    # If availability entries exist, ensure the proposed range fits within one of them
+                    if avail_rows:
+                        fits = False
+                        for slot in avail_rows:
+                            try:
+                                if slot.start_time and slot.end_time:
+                                    if (parsed_res_start >= slot.start_time) and (parsed_res_end <= slot.end_time):
+                                        fits = True
+                                        break
+                            except Exception:
+                                continue
+                        if not fits:
+                            return error_response("Proposed reschedule is outside available office hours", 400)
+                    else:
+                        # No availability defined for that date -> reject to be conservative
+                        return error_response("No availability defined for the proposed reschedule date", 400)
+
+                    # Check for conflicts with other appointments on the proposed date/time
+                    conflicts = s.execute(
+                        select(Appointment).where(
+                            (Appointment.date == parsed_res_date) &
+                            (Appointment.id != obj.id) &
+                            (Appointment.start_time < parsed_res_end) &
+                            (Appointment.end_time > parsed_res_start) &
+                            (Appointment.status != "cancelled")
+                        )
+                    ).scalars().all()
+                    if conflicts:
+                        return error_response("Proposed reschedule conflicts with an existing appointment", 400)
+
+                    # Enforce daily limit (same as creating): max 5 non-cancelled appointments per date
+                    daily_count = s.execute(
+                        select(Appointment).where((Appointment.date == parsed_res_date) & (Appointment.status != "cancelled") & (Appointment.id != obj.id))
+                    ).scalars().all()
+                    if len(daily_count) >= 5:
+                        return error_response("Maximum number of appointments reached for this date", 400)
+
                     obj.reschedule_requested = True
                     obj.reschedule_date = parsed_res_date
                     obj.reschedule_start_time = parsed_res_start
@@ -1196,6 +1391,8 @@ def create_app():
 
                 # If admin approves a pending reschedule request
                 if approve_res:
+                    if not is_admin_action:
+                        return error_response("Only admin may approve reschedule requests", 403)
                     # Only allow approve when there is a proposed reschedule
                     if getattr(obj, 'reschedule_requested', False) and getattr(obj, 'reschedule_date', None):
                         # Promote proposed values to appointment

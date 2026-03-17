@@ -71,6 +71,11 @@ html {
   }
 }
 
+/* Global fallback: disabled <option> text color (some browsers may ignore this) */
+select option[disabled] {
+  color: #bdbdbd;
+}
+
 /* Make status labels plain text globally (no boxed pills) */
 .status-text,
 .status-badge.status-text,

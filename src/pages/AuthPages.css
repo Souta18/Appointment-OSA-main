@@ -156,6 +156,16 @@
   opacity: 0.9;
 }
 
+.auth-error-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+.auth-error-list li {
+  margin-bottom: 4px;
+}
+
 .link-button {
   border: none;
   background: none;

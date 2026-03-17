@@ -264,6 +264,46 @@
   color: #2FC26A;
 }
 
+/* Rescheduled (soft yellow like student view) */
+.card-rescheduled {
+  background: #FFFBEB;
+  color: #7A4A12;
+  box-shadow: 0 12px 28px rgba(186,134,0,0.04);
+  border-radius: 15px;
+}
+
+.status-text.status-rescheduled { color: #B45309; }
+
+.details-status.status-rescheduled { color: #B45309; }
+
+/* Stronger specificity so card backgrounds reliably override the base .appointment-card style */
+.appointment-card.card-pending {
+  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%);
+  color: #083a66;
+  box-shadow: 0 12px 28px rgba(11,99,183,0.04);
+}
+.appointment-card.card-approved {
+  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
+  color: #0E662E;
+  box-shadow: 0 12px 28px rgba(47,163,85,0.06);
+}
+.appointment-card.card-cancelled {
+  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%);
+  color: #7A1F1F;
+  box-shadow: 0 12px 28px rgba(196,30,58,0.04);
+}
+.appointment-card.card-completed,
+.appointment-card.card-done {
+  background: linear-gradient(180deg, #CFF8D6 0%, #8EDB8C 100%);
+  color: #0E8A32;
+  box-shadow: 0 12px 28px rgba(14,138,50,0.06);
+}
+.appointment-card.card-rescheduled {
+  background: #FFFBEB;
+  color: #7A4A12;
+  box-shadow: 0 12px 28px rgba(186,134,0,0.04);
+}
+
 .status-text.status-ongoing {
   color: #D9730D;
 }

@@ -6,6 +6,7 @@ import Button from '../components/Button'
 import './AuthPages.css'
 import './GuestLogin.css'
 import { guestLogin, guestSignup } from '../api'
+import { validateEmailMessage, validatePhoneMessage, validateNameMessage, validatePassword } from '../validationHelpers'
 
 export default function GuestLogin() {
   const navigate = useNavigate()
@@ -14,15 +15,31 @@ export default function GuestLogin() {
   const [view, setView] = useState('signin') // 'signin' or 'signup'
   const [signInForm, setSignInForm] = useState({ username: '', password: '' })
   const [signUpForm, setSignUpForm] = useState({ firstName: '', middleName: '', lastName: '', email: '', contact: '', password: '' })
+  const [errors, setErrors] = useState({})
+  const [showValidation, setShowValidation] = useState(false)
 
   const handleSignInChange = (e) => {
-    setSignInForm({ ...signInForm, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setSignInForm({ ...signInForm, [name]: value })
     setError('')
+    setErrors(prev => {
+      const copy = { ...prev }
+      delete copy[name]
+      return copy
+    })
+    if (showValidation) setShowValidation(false)
   }
 
   const handleSignUpChange = (e) => {
-    setSignUpForm({ ...signUpForm, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setSignUpForm({ ...signUpForm, [name]: value })
     setError('')
+    setErrors(prev => {
+      const copy = { ...prev }
+      delete copy[name]
+      return copy
+    })
+    if (showValidation) setShowValidation(false)
   }
 
   const [error, setError] = useState('')
@@ -64,6 +81,25 @@ export default function GuestLogin() {
     const start = Date.now()
     setIsSubmitting(true)
     if (view === 'signup') {
+      // Client-side validation before sending to API
+      const vErrors = {}
+      const fnMsg = validateNameMessage(signUpForm.firstName, 'First Name')
+      if (fnMsg) vErrors.firstName = fnMsg
+      const lnMsg = validateNameMessage(signUpForm.lastName, 'Last Name')
+      if (lnMsg) vErrors.lastName = lnMsg
+      const emailMsg = validateEmailMessage(signUpForm.email)
+      if (emailMsg) vErrors.email = emailMsg
+      const contactMsg = validatePhoneMessage(signUpForm.contact)
+      if (contactMsg) vErrors.contact = contactMsg
+      const pwd = validatePassword(signUpForm.password)
+      if (!pwd.valid) vErrors.password = pwd.errors[0]
+      if (Object.keys(vErrors).length > 0) {
+        setErrors(vErrors)
+        setShowValidation(true)
+        setError('Please fill in all required fields correctly.')
+        setIsSubmitting(false)
+        return
+      }
       const fullName = `${signUpForm.firstName || ''}${signUpForm.middleName ? ' ' + signUpForm.middleName : ''}${signUpForm.lastName ? ' ' + signUpForm.lastName : ''}`.trim()
       const payload = {
         name: fullName,
@@ -131,8 +167,8 @@ export default function GuestLogin() {
             <h2 className="auth-title">Sign in</h2>
             <p className="auth-subtitle-text">Sign in with your guest account to view bookings.</p>
             <form onSubmit={handleSubmit}>
-              <Input label="Email or Username" name="username" placeholder="Email or username" value={signInForm.username} onChange={handleSignInChange} />
-              <Input label="Password" name="password" type="password" placeholder="Password" value={signInForm.password} onChange={handleSignInChange} />
+              <Input label="Email or Username" name="username" placeholder="Email or username" value={signInForm.username} onChange={handleSignInChange} error={''} />
+              <Input label="Password" name="password" type="password" placeholder="Password" value={signInForm.password} onChange={handleSignInChange} error={''} />
               {error && <div className="auth-error">{error}</div>}
               <div className="guest-buttons">
                 <Button type="button" variant="secondary" onClick={() => navigate('/student/login')}>Back</Button>
@@ -146,28 +182,31 @@ export default function GuestLogin() {
             <p className="auth-subtitle-text">Please enter your details to create an account.</p>
             <form onSubmit={handleSubmit}>
               <div className="signup-grid">
-                <div>
-                  <Input label="First Name" name="firstName" placeholder="e.g. Juan *" value={signUpForm.firstName} onChange={handleSignUpChange} />
-                </div>
-                <div>
-                  <Input label="Last Name" name="lastName" placeholder="e.g. Dela Cruz *" value={signUpForm.lastName} onChange={handleSignUpChange} />
-                </div>
+                  <div>
+                    <Input label="First Name" name="firstName" placeholder="e.g. Juan *" value={signUpForm.firstName} onChange={handleSignUpChange} error={errors.firstName || (showValidation && !signUpForm.firstName ? 'First Name is required' : '')} />
+                  </div>
+                  <div>
+                    <Input label="Last Name" name="lastName" placeholder="e.g. Dela Cruz *" value={signUpForm.lastName} onChange={handleSignUpChange} error={errors.lastName || (showValidation && !signUpForm.lastName ? 'Last Name is required' : '')} />
+                  </div>
 
                 <div>
                   <Input label="Middle Name (optional)" name="middleName" placeholder="e.g. Santos" value={signUpForm.middleName} onChange={handleSignUpChange} />
                 </div>
                 <div>
-                  <Input label="Contact Number" name="contact" placeholder="e.g. 09XX XXX XXXX *" value={signUpForm.contact} onChange={handleSignUpChange} />
+                  <Input label="Contact Number" name="contact" placeholder="e.g. 09XX XXX XXXX *" value={signUpForm.contact} onChange={handleSignUpChange} error={errors.contact || (showValidation && !signUpForm.contact ? 'Contact is required' : '')} />
                 </div>
 
                 <div>
-                  <Input label="Email Address" name="email" type="email" placeholder="e.g. student@gmail.com *" value={signUpForm.email} onChange={handleSignUpChange} />
+                  <Input label="Email Address" name="email" type="email" placeholder="e.g. student@gmail.com *" value={signUpForm.email} onChange={handleSignUpChange} error={errors.email || (showValidation && !signUpForm.email ? 'Email is required' : '')} />
                 </div>
                 <div>
-                  <Input label="Password" name="password" type="password" placeholder="e.g. •••••••• *" value={signUpForm.password} onChange={handleSignUpChange} />
+                  <Input label="Password" name="password" type="password" placeholder="e.g. •••••••• *" value={signUpForm.password} onChange={handleSignUpChange} error={errors.password || (showValidation && !signUpForm.password ? 'Password is required' : '')} />
                 </div>
               </div>
-              {error && <div className="auth-error">{error}</div>}
+              {/* Show top-level error panel only for Sign Up view */}
+              {error && (
+                <div className="auth-error">{error}</div>
+              )}
               <div className="guest-buttons">
                 <Button type="button" variant="secondary" onClick={() => { setView('signin'); setError('') }}>Have an account?</Button>
                 <Button type="submit" variant="primary" loading={isSubmitting}>Sign up</Button>

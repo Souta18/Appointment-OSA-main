@@ -12,6 +12,7 @@ import { useLocation } from 'react-router-dom'
 import NewUserModal from '../components/NewUserModal'
 import './AdminDashboard.css'
 import { listAppointments, updateAppointmentStatus, createAppointment as apiCreateAppointment, listAvailability, addAvailability, deleteAvailability, updateAvailability } from '../api'
+import Toast from '../components/Toast'
 
 export default function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -25,8 +26,15 @@ export default function AdminDashboard() {
   const [isCompleting, setIsCompleting] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [rescheduleData, setRescheduleData] = useState({ date: '', start: '', end: '', reason: '' })
+  const [rescheduleErrors, setRescheduleErrors] = useState([])
+  const [rescheduleChecking, setRescheduleChecking] = useState(false)
+  const [rescheduleCanSend, setRescheduleCanSend] = useState(false)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [declineReason, setDeclineReason] = useState('')
+  const [declineReasonType, setDeclineReasonType] = useState('')
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [confirmMessage, setConfirmMessage] = useState('')
+  const [confirmType, setConfirmType] = useState('success')
   const [showAllModal, setShowAllModal] = useState(false)
   const [showWalkInModal, setShowWalkInModal] = useState(false)
   const location = useLocation()
@@ -36,6 +44,7 @@ export default function AdminDashboard() {
   const [newDatedType, setNewDatedType] = useState('')
   const [newDatedStart, setNewDatedStart] = useState('')
   const [newDatedEnd, setNewDatedEnd] = useState('')
+  const [datedErrors, setDatedErrors] = useState({})
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [scheduleDay, setScheduleDay] = useState('')
   const [newStart, setNewStart] = useState('')
@@ -53,6 +62,7 @@ export default function AdminDashboard() {
   const [filterStatus, setFilterStatus] = useState('All')
   const [fromDateFilter, setFromDateFilter] = useState('')
   const [toDateFilter, setToDateFilter] = useState('')
+  const statusOptions = ['All', 'pending', 'approved', 'completed', 'rescheduled']
   const [chartRange, setChartRange] = useState('weekly')
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December']
@@ -97,14 +107,34 @@ export default function AdminDashboard() {
   const refreshAppointments = async () => {
     try {
       const res = await listAppointments()
-      if (res && res.ok && Array.isArray(res.data) && res.data.length > 0) {
-        setAppointments(res.data)
+      // If API reachable, treat server data as authoritative (even if empty)
+      if (res && res.ok && Array.isArray(res.data)) {
+        const serverApts = res.data || []
+        try { localStorage.setItem('appointments', JSON.stringify(serverApts)) } catch (e) {}
+        // annotate server appointments with admin name when available
+        try {
+          const rawAdmin = typeof window !== 'undefined' && localStorage.getItem('adminUser')
+          const adminName = rawAdmin ? (JSON.parse(rawAdmin||'{}').name || JSON.parse(rawAdmin||'{}').fullName || JSON.parse(rawAdmin||'{}').full_name || JSON.parse(rawAdmin||'{}').username) : null
+          const annotated = (serverApts || []).map(a => (a && (a.cancelled_by === 'admin' || (String(a.cancelled_by||'').toLowerCase()==='admin')) && adminName) ? { ...a, cancelled_by_name: adminName } : a)
+          setAppointments(annotated)
+        } catch (e) {
+          setAppointments(serverApts)
+        }
       } else {
         // Fallback: read appointments from localStorage (used by Walk-In page when backend is unavailable)
         try {
           const raw = localStorage.getItem('appointments')
           const arr = raw ? JSON.parse(raw) : []
-          setAppointments(Array.isArray(arr) ? arr : [])
+          // if admin user is logged in locally, backfill cancelled_by_name for admin-cancelled items
+          try {
+            const rawAdmin = typeof window !== 'undefined' && localStorage.getItem('adminUser')
+            const adminName = rawAdmin ? (JSON.parse(rawAdmin||'{}').name || JSON.parse(rawAdmin||'{}').fullName || JSON.parse(rawAdmin||'{}').full_name || JSON.parse(rawAdmin||'{}').username) : null
+            const annotated = (arr || []).map(a => (a && (a.cancelled_by === 'admin' || (String(a.cancelled_by||'').toLowerCase()==='admin')) && adminName) ? { ...a, cancelled_by_name: adminName } : a)
+            setAppointments(Array.isArray(annotated) ? annotated : [])
+            try { localStorage.setItem('appointments', JSON.stringify(annotated)) } catch (e) {}
+          } catch (e) {
+            setAppointments(Array.isArray(arr) ? arr : [])
+          }
         } catch (e) {
           setAppointments([])
         }
@@ -132,6 +162,46 @@ useEffect(() => {
     setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
   })()
 }, [])
+
+  // enable Send button only when basic client-side validation passes
+  useEffect(() => {
+    const toMins = (t) => {
+      if (!t) return null
+      const m = String(t).split(':')
+      if (m.length < 2) return null
+      const hh = parseInt(m[0], 10)
+      const mm = parseInt(m[1], 10)
+      if (isNaN(hh) || isNaN(mm)) return null
+      return hh * 60 + mm
+    }
+    try {
+      const { date, start, end } = rescheduleData || {}
+      if (!date || !start || !end) return setRescheduleCanSend(false)
+      const s = toMins(start)
+      const e = toMins(end)
+      if (s === null || e === null) return setRescheduleCanSend(false)
+      if (s >= e) return setRescheduleCanSend(false)
+      // not in past (allow small leeway)
+      const proposed = new Date(`${date}T${String(start).padStart(5,'0')}`)
+      if (proposed.getTime() < Date.now() - 60000) return setRescheduleCanSend(false)
+      // availability slot fit
+      const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+      const wd = weekDays[new Date(date).getDay()]
+      const ranges = (availability && availability[wd]) ? availability[wd] : []
+      const ok = (ranges || []).some(r => {
+        if (!r) return false
+        if (r.date && String(r.date).slice(0,10) !== String(date).slice(0,10)) return false
+        const rs = toMins(r.start)
+        const re = toMins(r.end)
+        if (rs === null || re === null) return false
+        return s >= rs && e <= re
+      })
+      if (!ok) return setRescheduleCanSend(false)
+      setRescheduleCanSend(true)
+    } catch (e) {
+      setRescheduleCanSend(false)
+    }
+  }, [rescheduleData, availability])
 
   // flatten dated availability entries for rendering
   const datedRows = Object.entries(availability).flatMap(([day, arr]) => {
@@ -205,6 +275,82 @@ useEffect(() => {
     setShowCreateUser(false)
   }
 
+  // helper: display who cancelled the appointment (try localStorage for actual names)
+  const getCancelledByDisplay = (apt) => {
+    try {
+      if (!apt) return 'Unknown'
+      // check local overrides (set when admin cancels while offline or to persist client-side)
+      try {
+        const rawOverrides = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
+        const overrides = rawOverrides ? JSON.parse(rawOverrides) : {}
+        if (overrides && apt.id && overrides[String(apt.id)]) {
+          const o = overrides[String(apt.id)]
+          return o.name || (o.by ? (o.by === 'admin' ? 'Admin' : (o.by === 'student' ? 'Student' : (o.by === 'guest' ? 'Guest' : 'Unknown'))) : 'Unknown')
+        }
+      } catch (e) {}
+      // quick checks for explicit name fields on the appointment
+      const explicitName = apt.cancelledByName || apt.cancelled_by_name || apt.cancelled_by_display || apt.cancelledBy || apt.cancelled_by_fullname || apt.cancelledByFullName || apt.adminName || apt.admin_name || apt.cancelledByAdmin
+      if (explicitName) return String(explicitName)
+
+      const key = String(apt.cancelled_by || apt.cancelledBy || '').toLowerCase()
+      const note = String(apt.adminNote || apt.admin_note || '')
+
+      // If appointment object embeds an admin object
+      if (apt.admin && typeof apt.admin === 'object') {
+        const a = apt.admin
+        return a.name || a.fullName || a.full_name || a.username || 'Admin'
+      }
+
+      // student/guest names are often in apt.name
+      if (key === 'student') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('studentName')) || 'Student'
+      if (key === 'guest') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('guestName')) || 'Guest'
+
+      // try to extract name from adminNote text using common phrases
+      const re1 = /cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m1 = note.match(re1)
+      if (m1 && m1[1]) {
+        const extracted = m1[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+      const re2 = /was cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
+      const m2 = note.match(re2)
+      if (m2 && m2[1]) {
+        const extracted = m2[1].split(/[.\n]/)[0].trim()
+        if (/system/i.test(extracted)) return 'Admin'
+        return extracted
+      }
+
+      if (key === 'admin') {
+        try {
+          const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser')
+          if (raw) {
+            const u = JSON.parse(raw || '{}')
+            return u.name || u.fullName || u.full_name || u.username || 'Admin'
+          }
+        } catch (e) {}
+        return 'Admin'
+      }
+
+      // Treat system cancellations as admin for display purposes
+      if (key === 'system') return 'Admin'
+
+      // fallback: if text hints at role
+      if (/student/i.test(note)) return apt.name || 'Student'
+      if (/guest/i.test(note)) return apt.name || 'Guest'
+      if (/admin/i.test(note)) return (typeof window !== 'undefined' && (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username } } catch(e){} })()) || 'Admin'
+
+      // final simple inference: if appointment has studentId treat as Student, if guest flag treat as Guest
+      if (['cancelled','canceled'].includes(String(apt.status || '').toLowerCase())) {
+        if (apt.studentId || apt.studentId === 0) return 'Student'
+        if (apt.guest) return 'Guest'
+        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) return 'Admin' } catch (e) {}
+      }
+
+      return 'Unknown'
+    } catch (e) { return 'Unknown' }
+  }
+
   // listen for global event dispatched by NavBar when admin clicks "Create User"
   useEffect(() => {
     const onOpen = () => setShowCreateUser(true)
@@ -253,7 +399,7 @@ useEffect(() => {
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length
   const doneCount = appointments.filter(a => (a.status || '').toLowerCase() === 'completed' || (a.status || '').toLowerCase() === 'done').length
-  const cancelledCount = appointments.filter(a => a.status === 'cancelled' || a.status === 'declined').length
+  const cancelledCount = appointments.filter(a => (String(a.status || '').toLowerCase() === 'cancelled') || (String(a.status || '').toLowerCase() === 'declined')).length
 
   // Helpers to format time values
   const formatFromInput = (hhmm) => {
@@ -318,14 +464,48 @@ useEffect(() => {
 
   // Save a dated availability slot (date + type). We'll store it under the weekday of the chosen date.
   const saveDatedSlot = async () => {
-    if (!newDatedDate) return
+    // client-side validation
+    const errs = {}
+    if (!newDatedDate) errs.date = 'Date is required'
+    // start/end expected in HH:MM (24h)
+    if (!newDatedStart) errs.start = 'Start time is required'
+    if (!newDatedEnd) errs.end = 'End time is required'
+    // Validate start < end
+    const parseHM = (s) => {
+      try {
+        const [hh, mm] = (s || '').split(':').map(Number)
+        if (Number.isInteger(hh) && Number.isInteger(mm)) return hh * 60 + mm
+      } catch (e) {}
+      return null
+    }
+    const startMin = parseHM(newDatedStart)
+    const endMin = parseHM(newDatedEnd)
+    if (startMin === null && !errs.start) errs.start = 'Invalid start time'
+    if (endMin === null && !errs.end) errs.end = 'Invalid end time'
+    if (startMin !== null && endMin !== null && startMin >= endMin) errs.general = 'Start time must be before end time'
+    // Do not allow dated availability in the past
+    try {
+      const today = new Date()
+      today.setHours(0,0,0,0)
+      const d = new Date(newDatedDate)
+      d.setHours(0,0,0,0)
+      if (!errs.date && d < today) errs.date = 'Date cannot be in the past'
+    } catch (e) {}
+
+    setDatedErrors(errs)
+    if (Object.keys(errs).length > 0) return
     try {
       const d = new Date(newDatedDate)
       if (isNaN(d)) return
       const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]
       const start = newDatedStart || ''
       const end = newDatedEnd || ''
-      await addAvailability(dayName, start, end, newDatedDate, newDatedType)
+      if (editingAvailId) {
+        // update existing dated availability
+        await updateAvailability(editingAvailId, dayName, start, end, newDatedDate)
+      } else {
+        await addAvailability(dayName, start, end, newDatedDate)
+      }
     } catch (e) {
       // ignore
     }
@@ -337,6 +517,8 @@ useEffect(() => {
     setNewDatedStart('')
     setNewDatedEnd('')
     setShowAddDatedModal(false)
+    setEditingAvailId(null)
+    setDatedErrors({})
   }
 
   const cancelEdit = () => {
@@ -394,10 +576,19 @@ useEffect(() => {
         const proceed = window.confirm(`There are ${overlapping.length} appointment(s) scheduled in this slot. Cancel them and remove the slot?`)
         if (!proceed) return
 
-        // cancel overlapping appointments first
+            // cancel overlapping appointments first
         for (const a of overlapping) {
           try {
-            await updateAppointmentStatus(a.id, 'cancelled')
+            await updateAppointmentStatus(a.id, 'cancelled', {}, true)
+            // optimistic local update so UI reflects admin cancel including admin name when available
+            const adminName = (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || null } } catch(e){} return null })()
+            setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'cancelled', cancelled_by: 'admin', cancelled_by_name: adminName } : x))
+            try {
+              const raw = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
+              const overrides = raw ? JSON.parse(raw) : {}
+              overrides[String(a.id)] = { by: 'admin', name: adminName || 'Admin' }
+              localStorage.setItem('cancelledByOverrides', JSON.stringify(overrides))
+            } catch (e) {}
           } catch (e) { /* ignore per-appointment errors and continue */ }
         }
       }
@@ -553,7 +744,7 @@ useEffect(() => {
   // Render action buttons for the details modal (keeps JSX here simpler)
   const renderDetailsActions = () => {
     if (!selectedAppointment) return null
-    const status = selectedAppointment.status
+    const status = String(selectedAppointment.status || '').toLowerCase()
 
     if (status === 'pending') {
       return (
@@ -561,7 +752,7 @@ useEffect(() => {
           <button className="decline-btn" onClick={() => { setDeclineReason(''); setShowDeclineModal(true) }}>Decline</button>
           <button className="approve-btn" onClick={() => {
             setIsApproving(true)
-            updateAppointmentStatus(selectedAppointment.id, 'approved').then(() => {
+            updateAppointmentStatus(selectedAppointment.id, 'approved', {}, true).then(() => {
               try {
                 const raw = localStorage.getItem('notifications')
                 const arr = raw ? JSON.parse(raw) : []
@@ -583,7 +774,10 @@ useEffect(() => {
     }
 
     if (['declined','cancelled'].includes(status)) {
-      if (selectedAppointment.adminNote === 'Cancelled by student') return null
+      const cancelledByKey = String(selectedAppointment.cancelled_by || selectedAppointment.cancelledBy || selectedAppointment.adminNote || '').toLowerCase()
+      // Show reschedule when admin cancelled (or when declined). Treat 'system' as admin.
+      const allowReschedule = (status === 'declined') || cancelledByKey.includes('admin') || cancelledByKey.includes('system')
+      if (!allowReschedule) return null
       return (
         <>
           <button className="reschedule-open-btn" onClick={() => { setRescheduleData({ date: '', start: '', end: '', reason: '' }); setRescheduleOpen(true) }}>Reschedule</button>
@@ -611,7 +805,7 @@ useEffect(() => {
             setDetailsOpen(false)
             setSelectedAppointment(null)
             try {
-              await updateAppointmentStatus(optimisticallyDone.id, 'completed')
+              await updateAppointmentStatus(optimisticallyDone.id, 'completed', {}, true)
               refreshAppointments()
             } catch (err) {
               setAppointments(prev => prev.map(a => a.id === prevAppointment.id ? prevAppointment : a))
@@ -717,16 +911,10 @@ useEffect(() => {
                 <div style={{display:'flex', gap:8}}>
                   <input placeholder="Search" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} style={{padding:8, borderRadius:8, border:'1px solid #ddd'}} />
                   <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{padding:8, borderRadius:8}}>
-                    {getDepartments().map(d=> <option key={d} value={d}>{d}</option>)}
+                    {getDepartments().map(d=> <option key={d} value={d}>{d === 'All' ? 'Program' : d}</option>)}
                   </select>
                   <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:8, borderRadius:8}}>
-                    <option>All</option>
-                    <option>pending</option>
-                    <option>approved</option>
-                    <option>confirmed</option>
-                    <option>done</option>
-                    <option>cancelled</option>
-                    <option>declined</option>
+                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <input type="date" value={fromDateFilter} onChange={e=>setFromDateFilter(e.target.value)} style={{padding:8, borderRadius:8}} />
                   <input type="date" value={toDateFilter} onChange={e=>setToDateFilter(e.target.value)} style={{padding:8, borderRadius:8}} />
@@ -764,8 +952,8 @@ useEffect(() => {
                             : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
                             : a.status === 'rescheduled' ? 'Rescheduled'
                             : (a.status === 'done' || a.status === 'completed') ? 'Completed'
-                            : a.status === 'cancelled' ? 'Cancelled'
-                            : a.status === 'declined' ? 'Declined'
+                            : ((a.status || '').toLowerCase() === 'cancelled') ? 'Cancelled'
+                            : ((a.status || '').toLowerCase() === 'declined') ? 'Declined'
                             : a.status
                           }</td>
                         </tr>
@@ -824,12 +1012,12 @@ useEffect(() => {
               if (visible.length === 0) return <div className="sidebar-empty">No appointments for this day</div>
               return visible.map(apt => (
                 <div key={apt.id} className={`sidebar-card ${
-                  apt.status === 'confirmed' ? 'status-confirmed'
-                  : apt.status === 'approved' ? 'status-approved'
-                  : apt.status === 'pending' ? 'status-pending'
-                  : apt.status === 'rescheduled' ? 'status-rescheduled'
-                  : (apt.status === 'done' || apt.status === 'completed') ? 'status-done'
-                  : apt.status === 'cancelled' ? 'status-cancelled'
+                  String(apt.status || '').toLowerCase() === 'confirmed' ? 'status-confirmed'
+                  : String(apt.status || '').toLowerCase() === 'approved' ? 'status-approved'
+                  : String(apt.status || '').toLowerCase() === 'pending' ? 'status-pending'
+                  : String(apt.status || '').toLowerCase() === 'rescheduled' ? 'status-rescheduled'
+                  : (String(apt.status || '').toLowerCase() === 'done' || String(apt.status || '').toLowerCase() === 'completed') ? 'status-done'
+                  : String(apt.status || '').toLowerCase() === 'cancelled' ? 'status-cancelled'
                   : 'status-declined'
                 }`}>
                 <div className="sidebar-card-meta">
@@ -851,25 +1039,29 @@ useEffect(() => {
                     }
                     return scheduledIso ? isoToLocalDateString(scheduledIso) : (apt.date || '')
                   })()}</span>
-                  <span className={`sidebar-card-status status-text ${
-                    apt.status === 'confirmed' ? 'status-confirmed'
-                    : apt.status === 'approved' ? 'status-approved'
-                    : apt.status === 'pending' ? 'status-pending'
-                    : apt.status === 'rescheduled' ? 'status-rescheduled'
-                    : (apt.status === 'done' || apt.status === 'completed') ? 'status-done'
-                    : apt.status === 'cancelled' ? 'status-cancelled'
-                    : 'status-declined'
-                  }${isAppointmentOngoing(apt) ? ' status-ongoing' : ''}`}>
-                    {
-                        (apt.status === 'confirmed') ? (isAppointmentOngoing(apt) ? 'Ongoing' : 'Rescheduled')
-                        : (apt.status === 'approved') ? (isAppointmentOngoing(apt) ? 'Ongoing' : 'Approved')
-                        : (apt.status === 'pending') ? 'For Approval'
-                        : (apt.status === 'rescheduled') ? 'Rescheduled'
-                        : (apt.status === 'done' || apt.status === 'completed') ? <span className="status-text status-completed">Completed</span>
-                        : (apt.status === 'declined') ? 'Declined'
-                        : 'Cancelled'
-                      }
-                  </span>
+                  {(() => {
+                    const status = String(apt.status || '').toLowerCase()
+                    const ongoing = isAppointmentOngoing(apt)
+                    const cls = status === 'confirmed' ? 'status-confirmed'
+                      : status === 'approved' ? 'status-approved'
+                      : status === 'pending' ? 'status-pending'
+                      : status === 'rescheduled' ? 'status-rescheduled'
+                      : (status === 'done' || status === 'completed') ? 'status-done'
+                      : status === 'cancelled' ? 'status-cancelled'
+                      : 'status-declined'
+                    return (
+                      <span className={`sidebar-card-status status-text ${cls}${ongoing ? ' status-ongoing' : ''}`}>
+                        { status === 'confirmed' ? (ongoing ? 'Ongoing' : 'Rescheduled')
+                          : status === 'approved' ? (ongoing ? 'Ongoing' : 'Approved')
+                          : status === 'pending' ? 'For Approval'
+                          : status === 'rescheduled' ? 'Rescheduled'
+                          : (status === 'done' || status === 'completed') ? <span className="status-text status-completed">Completed</span>
+                          : status === 'declined' ? 'Declined'
+                          : 'Cancelled'
+                        }
+                      </span>
+                    )
+                  })()}
                 </div>
 
                   <div className="sidebar-card-left">
@@ -895,6 +1087,14 @@ useEffect(() => {
                 </div>
 
                 <span onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true) }} className="sidebar-view" style={{cursor:'pointer'}}>View Details</span>
+                {String(apt.status || '').toLowerCase() === 'cancelled' && (() => {
+                  const key = String(apt.cancelled_by || apt.cancelledBy || apt.adminNote || '').toLowerCase()
+                  const isAdminCancel = key === 'admin' || key.includes('admin')
+                  const isStudentOrGuest = !!apt.guest || !!apt.studentId || String(apt.role || '').toLowerCase() === 'student'
+                  return (isAdminCancel && isStudentOrGuest) ? (
+                    <button className="reschedule-open-btn" onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); setRescheduleData({ date: (apt.iso || apt.date) || '', start: apt.start || apt.time || '', end: apt.end || '', reason: apt.reason || '' }); setRescheduleOpen(true) }} style={{marginLeft:8}}>Reschedule</button>
+                  ) : null
+                })()}
               </div>
               ))
             })()}
@@ -957,9 +1157,34 @@ useEffect(() => {
                   datedRows.map(r => (
                     <div key={r.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderBottom:'1px solid #f7f7f7'}}>
                       <div>
-                        <div style={{fontWeight:500}}>{r.day} — {r.start} to {r.end}</div>
+                        <div style={{fontWeight:500}}>
+                          {isoToLocalDateString(r.date, { month: 'short', day: 'numeric', year: 'numeric' })} — {r.day} — {r.start} to {r.end}
+                        </div>
                       </div>
                       <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                        <button className="edit-btn" onClick={() => {
+                          // pre-fill modal for editing this dated availability
+                          setEditingAvailId(r.id)
+                          setNewDatedDate(r.date || '')
+                          // `r.start` and `r.end` are in 12-hour format like "1:35 PM"; convert to 24h hh:mm for input[type=time]
+                          const to24 = (t) => {
+                            if (!t) return ''
+                            try {
+                              const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+                              if (!m) return ''
+                              let hh = Number(m[1])
+                              const mm = Number(m[2])
+                              const ampm = m[3].toUpperCase()
+                              if (ampm === 'PM' && hh !== 12) hh += 12
+                              if (ampm === 'AM' && hh === 12) hh = 0
+                              return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0')
+                            } catch (e) { return '' }
+                          }
+                          setNewDatedStart(to24(r.start))
+                          setNewDatedEnd(to24(r.end))
+                          setNewDatedType(r.type || '')
+                          setShowAddDatedModal(true)
+                        }}>Edit</button>
                         <button className="close-btn" onClick={() => { removeRange(r.day, (availability[r.day] || []).findIndex(x => x.id === r.id)) }}>Remove</button>
                       </div>
                     </div>
@@ -971,25 +1196,29 @@ useEffect(() => {
                         <h2>Add dated availability</h2>
                         <div style={{marginTop:12}}>
                           <label style={{display:'block', marginBottom:6}}>Date</label>
-                          <input type="date" value={newDatedDate} onChange={e => setNewDatedDate(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                          <input type="date" value={newDatedDate} onChange={e => { setNewDatedDate(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.date; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                          {datedErrors.date && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.date}</div>}
                         </div>
                         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12}}>
                           <div>
                             <label style={{display:'block', marginBottom:6}}>Start time</label>
-                            <input type="time" value={newDatedStart} onChange={e => setNewDatedStart(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                            <input type="time" value={newDatedStart} onChange={e => { setNewDatedStart(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.start; delete p.general; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                            {datedErrors.start && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.start}</div>}
                           </div>
                           <div>
                             <label style={{display:'block', marginBottom:6}}>End time</label>
-                            <input type="time" value={newDatedEnd} onChange={e => setNewDatedEnd(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                            <input type="time" value={newDatedEnd} onChange={e => { setNewDatedEnd(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.end; delete p.general; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                            {datedErrors.end && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.end}</div>}
                           </div>
                         </div>
                         <div style={{marginTop:12}}>
-                          <label style={{display:'block', marginBottom:6}}>Type — e.g. One-time, Exam, Office hours</label>
-                          <input type="text" value={newDatedType} onChange={e => setNewDatedType(e.target.value)} placeholder="e.g. One-time, Exam, Office hours" style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                          <label style={{display:'block', marginBottom:6}}>Reason:</label>
+                          <input type="text" value={newDatedType} onChange={e => setNewDatedType(e.target.value)} placeholder="Reason" style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
                         </div>
+                        {datedErrors.general && <div style={{color:'red', marginTop:8}}>{datedErrors.general}</div>}
                         <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
-                          <button className="close-btn" onClick={() => setShowAddDatedModal(false)}>Cancel</button>
-                          <button className="approve-btn" onClick={saveDatedSlot}>Save</button>
+                          <button className="close-btn" onClick={() => { setShowAddDatedModal(false); setDatedErrors({}); setEditingAvailId(null) }}>Cancel</button>
+                          <button className="approve-btn" onClick={saveDatedSlot} disabled={!newDatedDate || !newDatedStart || !newDatedEnd} style={{opacity: (!newDatedDate || !newDatedStart || !newDatedEnd) ? 0.6 : 1}}>Save</button>
                         </div>
                       </div>
                     </div>
@@ -1025,25 +1254,31 @@ useEffect(() => {
                     ) : null}
                   </div>
 
-                  <div className={`details-status status-text ${
-                  selectedAppointment.status === 'confirmed' ? 'status-confirmed'
-                  : selectedAppointment.status === 'approved' ? 'status-approved'
-                  : selectedAppointment.status === 'pending' ? 'status-pending'
-                  : selectedAppointment.status === 'rescheduled' ? 'status-rescheduled'
-                  : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? 'status-done'
-                  : selectedAppointment.status === 'cancelled' ? 'status-cancelled'
-                  : 'status-declined'
-                }${isAppointmentOngoing(selectedAppointment) ? ' status-ongoing' : ''}`}>
-                    {
-                      selectedAppointment.status === 'confirmed' ? (isAppointmentOngoing(selectedAppointment) ? 'Ongoing' : 'Rescheduled')
-                      : selectedAppointment.status === 'approved' ? (isAppointmentOngoing(selectedAppointment) ? 'Ongoing' : 'Approved')
-                      : selectedAppointment.status === 'pending' ? 'For Approval'
-                      : selectedAppointment.status === 'rescheduled' ? 'Rescheduled'
-                      : (selectedAppointment.status === 'done' || selectedAppointment.status === 'completed') ? <span className="status-text status-completed">Completed</span>
-                      : selectedAppointment.status === 'declined' ? 'Declined'
-                      : 'Cancelled'
-                    }
-                  </div>
+                  {(() => {
+                    const status = String(selectedAppointment.status || '').toLowerCase()
+                    const ongoing = isAppointmentOngoing(selectedAppointment)
+                    const cls = status === 'confirmed' ? 'status-confirmed'
+                      : status === 'approved' ? 'status-approved'
+                      : status === 'pending' ? 'status-pending'
+                      : status === 'rescheduled' ? 'status-rescheduled'
+                      : (status === 'done' || status === 'completed') ? 'status-done'
+                      : status === 'cancelled' ? 'status-cancelled'
+                      : 'status-declined'
+
+                    return (
+                      <div className={`details-status status-text ${cls}${ongoing ? ' status-ongoing' : ''}`}>
+                        {
+                          status === 'confirmed' ? (ongoing ? 'Ongoing' : 'Rescheduled')
+                          : status === 'approved' ? (ongoing ? 'Ongoing' : 'Approved')
+                          : status === 'pending' ? 'For Approval'
+                          : status === 'rescheduled' ? 'Rescheduled'
+                          : (status === 'done' || status === 'completed') ? <span className="status-text status-completed">Completed</span>
+                          : status === 'declined' ? 'Declined'
+                          : 'Cancelled'
+                        }
+                      </div>
+                    )
+                  })()}
               </div>
 
               <div className="details-section">
@@ -1063,10 +1298,24 @@ useEffect(() => {
                 </div>
               )}
 
-              {selectedAppointment.status === 'cancelled' && selectedAppointment.cancelReason && (
+              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && selectedAppointment.cancelReason && (
                 <div className="details-section">
                   <h3>Cancellation reason:</h3>
                   <p>{selectedAppointment.cancelReason}</p>
+                </div>
+              )}
+
+              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (
+                <div className="details-section">
+                  <h3>Cancelled by:</h3>
+                  <p>{getCancelledByDisplay(selectedAppointment)}</p>
+                </div>
+              )}
+
+              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at) && (
+                <div className="details-section">
+                  <h3>Cancelled at:</h3>
+                  <p>{new Date(selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
                 </div>
               )}
 
@@ -1125,6 +1374,8 @@ useEffect(() => {
           </div>
         )}
 
+        <Toast show={showConfirm} type={confirmType} message={confirmMessage} onClose={() => setShowConfirm(false)} />
+
         {rescheduleOpen && selectedAppointment && (
           <div className="details-modal-overlay" onClick={() => setRescheduleOpen(false)}>
             <div className="reschedule-modal" onClick={(e) => e.stopPropagation()}>
@@ -1148,12 +1399,102 @@ useEffect(() => {
                 <input type="email" value={selectedAppointment.email} readOnly style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ddd', background:'#f7f7f7'}} />
               </div>
 
+              {/* Validation panel removed: button will be disabled until inputs look valid */}
+
                 <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:18}}>
                 <button className="close-btn" onClick={() => setRescheduleOpen(false)}>Back</button>
-                <button className="approve-btn" onClick={async () => {
+                <button className="approve-btn" disabled={!rescheduleCanSend || rescheduleChecking} onClick={async () => {
+                  // client-side validation before sending
+                  setRescheduleErrors([])
+                  const validateReschedule = async () => {
+                    const errs = []
+                    const { date, start, end } = rescheduleData || {}
+                    if (!date) errs.push('Date is required')
+                    if (!start) errs.push('Start time is required')
+                    if (!end) errs.push('End time is required')
+                    // parse times HH:MM
+                    const toMins = (t) => {
+                      if (!t) return null
+                      const m = String(t).split(':')
+                      if (m.length < 2) return null
+                      const hh = parseInt(m[0], 10)
+                      const mm = parseInt(m[1], 10)
+                      if (isNaN(hh) || isNaN(mm)) return null
+                      return hh * 60 + mm
+                    }
+                    const s = toMins(start)
+                    const e = toMins(end)
+                    if (s === null || e === null) errs.push('Invalid time format')
+                    if (s !== null && e !== null && s >= e) errs.push('Start time must be before end time')
+                    // not in the past
+                    try {
+                      if (date && s !== null) {
+                        const proposed = new Date(`${date}T${String(start).padStart(5,'0')}`)
+                        if (proposed.getTime() < Date.now() - 60000) errs.push('Proposed start is in the past')
+                      }
+                    } catch (e) {}
+
+                    // availability check: ensure there is an availability slot that contains the requested range
+                    if (date && s !== null && e !== null) {
+                      try {
+                        const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+                        const wd = weekDays[new Date(date).getDay()]
+                        const ranges = (availability && availability[wd]) ? availability[wd] : []
+                        // allow dated availability entries (r.date === date)
+                        const ok = (ranges || []).some(r => {
+                          if (!r) return false
+                          // if r has date, it must match
+                          if (r.date && String(r.date).slice(0,10) !== String(date).slice(0,10)) return false
+                          const rs = toMins(r.start)
+                          const re = toMins(r.end)
+                          if (rs === null || re === null) return false
+                          return s >= rs && e <= re
+                        })
+                        if (!ok) errs.push('Requested time does not fit any availability slot')
+                      } catch (e) {}
+                    }
+
+                    // conflict and daily limit checks using existing appointments
+                    try {
+                      const res = await listAppointments()
+                      if (res && res.ok) {
+                        const iso = String(date)
+                        const existing = (res.data || []).filter(a => {
+                          const apIso = a.iso || (a.date ? (typeof a.date === 'string' && a.date.length === 10 ? a.date : '') : '')
+                          if (!apIso) return false
+                          if (apIso !== iso) return false
+                          if ((a.status || '').toLowerCase() === 'cancelled') return false
+                          return a.id !== selectedAppointment.id
+                        })
+                        // daily limit
+                        if (existing.length >= 5) errs.push('Daily appointment limit reached for selected date')
+                        // conflict: overlapping times
+                        const overlaps = (otherStart, otherEnd, s2, e2) => Math.max(otherStart, s2) < Math.min(otherEnd, e2)
+                        const conflicts = existing.some(a => {
+                          const aStart = toMins(a.start || a.time || '')
+                          const aEnd = toMins(a.end || '')
+                          if (aStart === null || aEnd === null) return false
+                          return overlaps(aStart, aEnd, s, e)
+                        })
+                        if (conflicts) errs.push('Requested time conflicts with another appointment')
+                      }
+                    } catch (e) {}
+
+                    return errs
+                  }
+
+                    setRescheduleChecking(true)
+                    const errors = await validateReschedule()
+                  setRescheduleChecking(false)
+                  if (errors && errors.length > 0) {
+                    // don't render the inline panel; alert instead
+                    alert(errors.join('\n'))
+                    return
+                  }
+
                   // Call backend to apply and approve reschedule
                   try {
-                    await updateAppointmentStatus(selectedAppointment.id, 'confirmed', { rescheduleDate: rescheduleData.date, rescheduleStart: rescheduleData.start, rescheduleEnd: rescheduleData.end, rescheduleReason: rescheduleData.reason, approveReschedule: true })
+                    await updateAppointmentStatus(selectedAppointment.id, 'confirmed', { rescheduleDate: rescheduleData.date, rescheduleStart: rescheduleData.start, rescheduleEnd: rescheduleData.end, rescheduleReason: rescheduleData.reason, approveReschedule: true }, true)
                   } catch (e) {
                     // ignore - we'll refresh to get server state
                   }
@@ -1179,18 +1520,57 @@ useEffect(() => {
           <div className="details-modal-overlay" onClick={() => setShowDeclineModal(false)}>
             <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:520}}>
               <h2>Decline appointment</h2>
-              <p>Please provide a reason for declining (optional)</p>
+              <p>Please tell us why you're declining this appointment</p>
               <div style={{marginTop:12}}>
-                <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="Reason for declining (optional)" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                <label style={{display:'block', marginBottom:8}}>Declining Reason</label>
+                <select value={declineReasonType} onChange={e => setDeclineReasonType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #e6e6e6'}}>
+                  <option value="" disabled>Select reason</option>
+                  <option value="Medical_or_emergency_leave">Medical or emergency leave</option>
+                  <option value="Schedule_conflict">Schedule conflict</option>
+                  <option value="others">Others</option>
+                </select>
+                {declineReasonType === 'others' && (
+                  <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="Please provide cancellation details" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6', marginTop:12}} />
+                )}
               </div>
               <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
-                <button className="close-btn" onClick={() => setShowDeclineModal(false)}>Back</button>
+                <button className="close-btn" onClick={() => {
+                  setShowDeclineModal(false)
+                  setDeclineReason('')
+                  setDeclineReasonType('')
+                }}>Back</button>
                 <button className="decline-btn" onClick={async () => {
-                  const reason = (declineReason || '').trim()
-                  try {
-                    // mark as cancelled on the server and attach the optional cancel reason
-                    await updateAppointmentStatus(selectedAppointment.id, 'cancelled', { cancelReason: reason, adminNote: reason })
-                  } catch (e) { /* ignore */ }
+                  const type = (declineReasonType || '').trim()
+                  const otherText = (declineReason || '').trim()
+                  // validation
+                  if (!type) {
+                    setConfirmType('error')
+                    setConfirmMessage('Please select a cancellation reason.')
+                    setShowConfirm(true)
+                    setTimeout(() => setShowConfirm(false), 3000)
+                    return
+                  }
+                  if (type === 'others' && !otherText) {
+                    setConfirmType('error')
+                    setConfirmMessage('Please provide details for "Others".')
+                    setShowConfirm(true)
+                    setTimeout(() => setShowConfirm(false), 3000)
+                    return
+                  }
+                  const reasonMap = {
+                    medical_or_emergency_leave: 'Medical or emergency leave',
+                    Schedule_conflict: 'Schedule conflict',
+                    others: otherText
+                  }
+                  const reason = (reasonMap[type] !== undefined) ? reasonMap[type] : otherText
+
+                  // Optimistically update local UI
+                  const cancelledTs = new Date().toISOString()
+                  const adminName = (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || null } } catch(e){} return null })()
+                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, status: 'cancelled', cancelReason: reason, adminNote: reason, cancelled_by: 'admin', cancelled_by_name: adminName, cancelledAt: cancelledTs, cancelled_at: cancelledTs } : a))
+                  setSelectedAppointment(prev => ({ ...prev, status: 'cancelled', cancelReason: reason, adminNote: reason, cancelled_by: 'admin', cancelled_by_name: adminName, cancelledAt: cancelledTs, cancelled_at: cancelledTs }))
+
+                  // notifications
                   try {
                     const raw = localStorage.getItem('notifications')
                     const arr = raw ? JSON.parse(raw) : []
@@ -1198,13 +1578,42 @@ useEffect(() => {
                     arr.unshift({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment cancelled', message: `Your appointment on ${selectedAppointment.date || selectedAppointment.iso} was cancelled by the admin.${msgReason}`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
                     localStorage.setItem('notifications', JSON.stringify(arr))
                   } catch (e) {}
-                  // update local UI to cancelled with cancelReason for immediate feedback
-                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, status: 'cancelled', cancelReason: reason, adminNote: reason } : a))
-                  setSelectedAppointment(prev => ({ ...prev, status: 'cancelled', cancelReason: reason, adminNote: reason }))
+
+                  // update cancelledByOverrides
+                  try {
+                    const raw = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
+                    const overrides = raw ? JSON.parse(raw) : {}
+                    overrides[String(selectedAppointment.id)] = { by: 'admin', name: adminName || 'Admin' }
+                    localStorage.setItem('cancelledByOverrides', JSON.stringify(overrides))
+                  } catch (e) {}
+
+                  // update local appointments cache so optimistic cancel persists
+                  try {
+                    const rawA = localStorage.getItem('appointments')
+                    const arrA = rawA ? JSON.parse(rawA) : []
+                    const updatedArr = (arrA || []).map(a =>
+                      a && a.id === selectedAppointment.id ? { ...a, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'admin', adminNote: reason } : a
+                    )
+                    if (!updatedArr.find(x => x && x.id === selectedAppointment.id)) {
+                      const orig = (appointments.find(a => a && a.id === selectedAppointment.id) || { id: selectedAppointment.id })
+                      updatedArr.unshift({ ...orig, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'admin', adminNote: reason })
+                    }
+                    localStorage.setItem('appointments', JSON.stringify(updatedArr))
+                  } catch (e) {}
+
+                  // Call backend to cancel (fire-and-forget)
+                  (async () => {
+                    try {
+                      await updateAppointmentStatus(selectedAppointment.id, 'cancelled', { cancelReason: reason, adminNote: reason }, true)
+                    } catch (e) { /* ignore */ }
+                    try { await refreshAppointments() } catch (e) {}
+                  })()
+
                   setShowDeclineModal(false)
                   setDetailsOpen(false)
                   setSelectedAppointment(null)
-                  refreshAppointments()
+                  setDeclineReason('')
+                  setDeclineReasonType('')
                 }}>Confirm Decline</button>
               </div>
             </div>

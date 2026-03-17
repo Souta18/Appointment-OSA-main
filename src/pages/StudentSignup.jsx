@@ -4,6 +4,7 @@ import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
 import Button from '../components/Button'
 import { studentSignup } from '../api'
+import { validateStudentSignup, validateStudentNumberMessage, validatePhoneMessage, validateNameMessage, validateEmailMessage, validatePasswordMessage } from '../validationHelpers'
 import './AuthPages.css'
 import './StudentLogin.css'
 import './StudentSignup.css'
@@ -21,85 +22,118 @@ export default function StudentSignup() {
     password: ''
   })
   const [error, setError] = useState('')
+    const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const loadingTimer = useRef(null)
+  const errorTimer = useRef(null)
+
+  const showError = (msg) => {
+    setError(msg)
+    if (errorTimer.current) clearTimeout(errorTimer.current)
+    errorTimer.current = setTimeout(() => {
+      setError('')
+      errorTimer.current = null
+    }, 3000)
+  }
 
   useEffect(() => {
     return () => {
       if (loadingTimer.current) clearTimeout(loadingTimer.current)
+      if (errorTimer.current) clearTimeout(errorTimer.current)
     }
   }, [])
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setForm({ ...form, [name]: value })
     setError('')
+    if (errorTimer.current) {
+      clearTimeout(errorTimer.current)
+      errorTimer.current = null
+    }
+    setErrors(prev => {
+      const copy = { ...prev }
+      delete copy[name]
+      return copy
+    })
+  }
+
+  const capitalizeWords = (s) => {
+    if (!s) return ''
+    return String(s).split(/\s+/).map(w => w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : '').join(' ')
+  }
+
+  const handleNameBlur = (e) => {
+    const name = e.target.name
+    if (!['firstName','middleName','lastName'].includes(name)) return
+    const val = form[name]
+    const cap = capitalizeWords(val)
+    if (cap !== val) setForm(f => ({ ...f, [name]: cap }))
+  }
+
+  const handleBlurValidate = (e) => {
+    const name = e.target.name
+    const val = (form[name] || '').trim()
+    let msg = ''
+    if (name === 'firstName' || name === 'lastName' || name === 'middleName') {
+      msg = validateNameMessage(val, name === 'middleName' ? 'Middle Name' : (name === 'firstName' ? 'First Name' : 'Last Name'))
+    } else if (name === 'studentNumber') {
+      msg = validateStudentNumberMessage(val)
+    } else if (name === 'contact') {
+      if (!val) {
+        msg = 'Contact number is required'
+      } else {
+        msg = validatePhoneMessage(val)
+      }
+    } else if (name === 'email') {
+      msg = validateEmailMessage(val)
+    } else if (name === 'password') {
+      msg = validatePasswordMessage(val)
+    }
+    setErrors(prev => ({ ...prev, ...(msg ? { [name]: msg } : {}) }))
+  }
+
+  const validateStudentNumberFormat = (s) => {
+    if (!s) return false
+    const v = String(s).trim()
+    // enforce format starting with 2023- followed by four digits (e.g. 2023-0000)
+    return /^2023-\d{4}$/.test(v)
+  }
+
+  const validateContactFormat = (s) => {
+    if (!s) return false
+    const raw = String(s).trim()
+    // remove spaces, parentheses, dashes
+    const cleaned = raw.replace(/[\s()-]/g, '')
+    // allow +63XXXXXXXXXX (plus then 10 digits) or 09XXXXXXXXX (11 digits)
+    if (/^\+63\d{10}$/.test(cleaned)) return true
+    if (/^09\d{9}$/.test(cleaned)) return true
+    return false
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     // Check if any required field is empty
-    const requiredFields = [
-      form.firstName,
-      form.lastName,
-      form.studentNumber,
-      form.email,
-      form.contact,
-      form.course,
-      form.password
-    ]
-    
-    const hasEmptyFields = requiredFields.some(field => !field.trim())
-    if (hasEmptyFields) {
-      setError('Please fill out all required fields')
+    // run combined validation helper
+    const combined = validateStudentSignup({ ...form, confirmPassword: form.password })
+    if (!combined.valid) {
+      setErrors(combined.errors)
+      // show ordered messages as an array so they render on separate lines
+      // show a single generic message to the user for required fields
+      showError('Please fill up the requirement')
+      // focus the first invalid field in visual order
+      const firstKey = Object.keys(combined.errors)[0]
+      if (firstKey) {
+        const el = document.querySelector(`[name="${firstKey}"]`)
+        if (el && typeof el.focus === 'function') {
+          try { el.focus() } catch {}
+          try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch {}
+        }
+      }
       return
     }
-    
-    // Form validation for specific requirements
-    if (!form.firstName.trim()) {
-      setError('First name is required')
-      return
-    }
-    if (!form.lastName.trim()) {
-      setError('Last name is required')
-      return
-    }
-    if (!form.studentNumber.trim()) {
-      setError('Student number is required')
-      return
-    }
-    if (!form.email.trim()) {
-      setError('Email address is required')
-      return
-    }
-    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.email.trim())) {
-      setError('Invalid email format')
-      return
-    }
-    if (!form.contact.trim()) {
-      setError('Contact number is required')
-      return
-    }
-    if (!form.course.trim()) {
-      setError('Course is required')
-      return
-    }
-    if (!form.password.trim()) {
-      setError('Password is required')
-      return
-    }
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters')
-      return
-    }
-    if (!/[A-Z]/.test(form.password)) {
-      setError('Password must contain at least one uppercase letter')
-      return
-    }
-    if (!/[0-9]/.test(form.password)) {
-      setError('Password must contain at least one digit')
-      return
-    }
+    // previous manual checks replaced by combined helper above
 
     const start = Date.now()
     setIsLoading(true)
@@ -122,17 +156,32 @@ export default function StudentSignup() {
         // Navigate to dashboard
         navigate('/student/dashboard')
       } else if (response.error) {
-        // Show exact backend error and include details when available
-        const detailsText = response.details ? ` - ${JSON.stringify(response.details)}` : ''
-        setError(`${response.error}${detailsText}`)
+        // Show structured backend validation errors (if any) as separate messages
+        if (response.details && typeof response.details === 'object') {
+          // Set field-level errors and a top-level ordered list for display
+          setErrors(response.details)
+          // display a single generic message to the user
+          showError('Please fill up the requirement')
+          // focus first invalid field returned by server
+          const firstKey = Object.keys(response.details)[0]
+          if (firstKey) {
+            const el = document.querySelector(`[name="${firstKey}"]`)
+            if (el && typeof el.focus === 'function') {
+              try { el.focus() } catch {}
+              try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch {}
+            }
+          }
+        } else {
+          showError(response.error)
+        }
       } else {
-        setError('Sign up failed. Please try again.')
+        showError('Sign up failed. Please try again.')
       }
     } catch (err) {
       if (err.message.includes('network') || err.message.includes('fetch')) {
-        setError('Network error. Please check your internet connection and try again.')
+        showError('Network error. Please check your internet connection and try again.')
       } else {
-        setError('An unexpected error occurred. Please try again.')
+        showError('An unexpected error occurred. Please try again.')
       }
       console.error(err)
     } finally {
@@ -162,6 +211,8 @@ export default function StudentSignup() {
                 placeholder="e.g. Juan *"
                 value={form.firstName}
                 onChange={handleChange}
+                onBlur={(e) => { handleNameBlur(e); handleBlurValidate(e) }}
+                error={errors.firstName}
               />
               <Input
                 label="Last Name"
@@ -169,6 +220,8 @@ export default function StudentSignup() {
                 placeholder="e.g. Dela Cruz *"
                 value={form.lastName}
                 onChange={handleChange}
+                onBlur={(e) => { handleNameBlur(e); handleBlurValidate(e) }}
+                error={errors.lastName}
               />
             </div>
             <div className="form-row">
@@ -178,6 +231,8 @@ export default function StudentSignup() {
                 placeholder="e.g. Santos"
                 value={form.middleName}
                 onChange={handleChange}
+                onBlur={(e) => { handleNameBlur(e); handleBlurValidate(e) }}
+                error={errors.middleName}
               />
               <Input
                 label="Student Number"
@@ -185,6 +240,8 @@ export default function StudentSignup() {
                 placeholder="e.g. 2023-0000 *"
                 value={form.studentNumber}
                 onChange={handleChange}
+                onBlur={handleBlurValidate}
+                error={errors.studentNumber}
               />
             </div>
             <Input
@@ -194,13 +251,17 @@ export default function StudentSignup() {
               placeholder="e.g. student@gmail.com *"
               value={form.email}
               onChange={handleChange}
+              onBlur={handleBlurValidate}
+              error={errors.email}
             />
             <Input
               label="Contact Number"
               name="contact"
-              placeholder="e.g. 09XX XXX XXXX *"
+              placeholder="e.g. 09XX XXX XXXX or +639XXXXXXXXX *"
               value={form.contact}
               onChange={handleChange}
+              onBlur={handleBlurValidate}
+              error={errors.contact}
             />
             <div className="form-row">
               <div className="form-group">
@@ -210,7 +271,8 @@ export default function StudentSignup() {
                   name="course"
                   value={form.course}
                   onChange={handleChange}
-                  className="form-select"
+                  className={`form-select ${errors.course ? 'form-select-error' : ''}`}
+                  onBlur={handleBlurValidate}
                 >
                   <option value="">Select your course</option>
                   <option value="BSCS">BSCS</option>
@@ -218,6 +280,7 @@ export default function StudentSignup() {
                   <option value="BEED">BEED</option>
                   <option value="BSHM">BSHM</option>
                 </select>
+                {errors.course && <p className="form-input-error-message">{errors.course}</p>}
               </div>
               <Input
                 label="Password"
@@ -226,9 +289,15 @@ export default function StudentSignup() {
                 placeholder="e.g. ••••••••"
                 value={form.password}
                 onChange={handleChange}
+                onBlur={handleBlurValidate}
+                error={errors.password}
               />
             </div>
-            {error && <div className="auth-error">{error}</div>}
+            {error && (
+              <div className="form-error-panel">
+                <p className="form-input-error-message">{error}</p>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Creating account...' : 'Sign up'}
             </Button>

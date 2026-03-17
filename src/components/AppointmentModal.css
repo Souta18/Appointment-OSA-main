@@ -173,6 +173,11 @@
   color: var(--text-dark);
 }
 
+/* Make disabled options (eg. "Already Booked") appear light gray */
+.modal-select option[disabled] {
+  color: #bdbdbd;
+}
+
 /* input used for 'Please specify' under Other reason */
 .modal-input {
   width: 100%;
