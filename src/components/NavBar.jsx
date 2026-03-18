@@ -7,6 +7,7 @@ export default function NavBar({ userType = 'student' }) {
   const navigate = useNavigate()
   const [openNotifs, setOpenNotifs] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [currentTime, setCurrentTime] = useState(new Date())
   const notifRef = useRef(null)
   const btnRef = useRef(null)
   const userRef = useRef(null)
@@ -23,6 +24,38 @@ export default function NavBar({ userType = 'student' }) {
   // filter by user type: students see their own notifications, admins see admin/global
   const currentEmail = typeof window !== 'undefined' && localStorage.getItem('studentEmail')
   const currentId = typeof window !== 'undefined' && localStorage.getItem('studentId')
+
+  const getUserName = () => {
+    try {
+      if (userType === 'admin') {
+        const raw = localStorage.getItem('adminUser')
+        if (raw) {
+          const u = JSON.parse(raw || '{}')
+          return u.name || u.fullName || u.full_name || u.username || 'Admin'
+        }
+        return 'Admin'
+      }
+
+      if (userType === 'guest') {
+        return localStorage.getItem('guestName') || 'Guest'
+      }
+
+      return localStorage.getItem('studentName') || 'Student'
+    } catch (e) {
+      return userType === 'admin' ? 'Admin' : userType === 'guest' ? 'Guest' : 'Student'
+    }
+  }
+  const [userName, setUserName] = useState(getUserName())
+
+  const formatCurrentTime = () => {
+    try {
+      return currentTime.toLocaleString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+      })
+    } catch (e) {
+      return ''
+    }
+  }
   let visibleNotifications = []
   if (userType === 'admin') {
     // Admin should not see notifications explicitly targeted to students only
@@ -89,13 +122,22 @@ export default function NavBar({ userType = 'student' }) {
     return () => document.removeEventListener('click', onDoc)
   }, [])
 
-  // load avatar for current user and refresh when profile modal closes or notifications change
+  // update clock every minute
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(new Date()), 60000)
+    return () => clearInterval(id)
+  }, [])
+
+  // load avatar and display name for current user and refresh when profile modal closes or notifications change
   useEffect(() => {
     try {
       const key = userType === 'admin' ? 'adminAvatar' : (userType === 'guest' ? 'guestAvatar' : 'studentAvatar')
       const a = typeof window !== 'undefined' && localStorage.getItem(key)
       setAvatar(a || null)
     } catch (e) { setAvatar(null) }
+
+    // keep the welcome text in sync with what is stored in localStorage
+    setUserName(getUserName())
   }, [userType, showProfile, notifVersion])
 
   const markAsReadAndOpen = (n) => {
@@ -155,6 +197,10 @@ export default function NavBar({ userType = 'student' }) {
           </div>
         </div>
         <div className="navbar-actions">
+          <div className="navbar-user-info">
+            <div className="navbar-user-welcome">Welcome, {userName}</div>
+            <div className="navbar-user-time">{formatCurrentTime()}</div>
+          </div>
           <div className="navbar-actions-inner" ref={notifRef}>
           <button ref={btnRef} className="navbar-notifications" aria-label="Notifications" aria-expanded={openNotifs} onClick={() => setOpenNotifs((s) => !s)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -167,20 +213,27 @@ export default function NavBar({ userType = 'student' }) {
             <div className="notification-dropdown" role="menu" aria-label="Notifications list">
               <div className="notif-header">
                 <div className="notif-title">Notifications</div>
-                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                <div className="notif-header-actions">
                   {unreadCount > 0 ? (
                     <button className="notif-markall" onClick={markAllAsRead}>Mark all as read</button>
                   ) : (
                     <div className="notif-empty-count">All read</div>
                   )}
-                  <button className="notif-clear" onClick={clearAllNotifications} style={{marginLeft:8}}>Clear all</button>
+                  <button className="notif-clear" onClick={clearAllNotifications}>Clear all</button>
                 </div>
               </div>
               <div className="notification-list">
                 {visibleNotifications.map((n) => (
-                  <div key={n.id} className="notification-item" onClick={() => markAsReadAndOpen(n)}>
+                  <div
+                    key={n.id}
+                    className={`notification-item ${n.read ? '' : 'notification-item--unread'}`}
+                    onClick={() => markAsReadAndOpen(n)}
+                  >
                     <div className="notification-row">
-                      <div className="notification-title">{n.title}</div>
+                      <div className="notification-title">
+                        <span className="notification-dot" aria-hidden />
+                        {n.title}
+                      </div>
                       <div className="notification-time">{formatTime(n.createdAt)}</div>
                     </div>
                     <div className="notification-message">{n.message}</div>

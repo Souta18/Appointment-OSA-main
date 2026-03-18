@@ -191,10 +191,10 @@ export default function GuestAppointmentModal({ onClose, onSubmit, guestName = '
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <Button type="submit" className="btn-blue" loading={isSubmitting}>Book Appointment</Button>
+            <Button type="submit" className="btn-blue btn-sm" loading={isSubmitting}>Book Appointment</Button>
           </div>
         </form>
       </div>

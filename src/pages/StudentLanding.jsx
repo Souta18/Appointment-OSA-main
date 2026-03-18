@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Calendar, Trash2 } from 'lucide-react'
 import NavBar from '../components/NavBar'
 import AppointmentModal from '../components/AppointmentModal'
 import Toast from '../components/Toast'
@@ -100,6 +101,47 @@ export default function StudentLanding() {
     } catch (e) { return '' }
   }
 
+  const formatPrettyDate = (d) => {
+    try {
+      if (!d) return ''
+      const dt = new Date(d)
+      if (isNaN(dt.getTime())) return String(d)
+      return dt.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })
+    } catch (e) {
+      return String(d)
+    }
+  }
+
+  const getAppointmentStatusKey = (apt) => {
+    if (!apt) return ''
+    const raw = (apt.status || '').toString().toLowerCase().trim()
+
+    // Treat “rescheduled” visually whenever we have any reschedule data.
+    const hasReschedule = Boolean(
+      apt.rescheduleRequested ||
+      apt.rescheduleDate ||
+      apt.reschedule_date ||
+      apt.rescheduleStart ||
+      apt.reschedule_start ||
+      apt.rescheduleEnd ||
+      apt.reschedule_end
+    )
+
+    if (hasReschedule || raw === 'rescheduled') return 'rescheduled'
+    if (raw === 'confirmed') return 'rescheduled'
+    return raw
+  }
+
+  const getAppointmentStatusLabel = (apt) => {
+    const key = getAppointmentStatusKey(apt)
+    if (key === 'pending') return 'Pending for approval'
+    if (key === 'approved') return 'Approved'
+    if (key === 'rescheduled') return 'Rescheduled'
+    if (key === 'cancelled') return 'Cancelled'
+    if (key === 'done' || key === 'completed') return 'Completed'
+    return (apt?.status || '').toString()
+  }
+
   const handleBookAppointment = async (data) => {
     // check ban for this student email
     try {
@@ -112,7 +154,7 @@ export default function StudentLanding() {
         setConfirmType('error')
         setShowConfirm(true)
         setConfirmMessage(`Your booking privileges are suspended until ${untilStr}.`) 
-        setTimeout(() => setShowConfirm(false), 5000)
+        setTimeout(() => setShowConfirm(false), 2000)
         return
       }
     } catch (e) {}
@@ -197,7 +239,7 @@ export default function StudentLanding() {
           setConfirmType('error')
           setShowConfirm(true)
           setConfirmMessage('An appointment already exists for that date and time. Please choose a different time.')
-          setTimeout(() => setShowConfirm(false), 5000)
+          setTimeout(() => setShowConfirm(false), 2000)
           return
         }
       }
@@ -242,18 +284,18 @@ export default function StudentLanding() {
         setConfirmType('success')
         setShowConfirm(true)
         setConfirmMessage('Appointment requested successfully!')
-        setTimeout(() => setShowConfirm(false), 3000)
+        setTimeout(() => setShowConfirm(false), 2000)
       } else {
         setConfirmType('error')
         setShowConfirm(true)
         setConfirmMessage(res?.error || 'Unable to create appointment. It will remain visible locally until resolved.')
-        setTimeout(() => setShowConfirm(false), 5000)
+        setTimeout(() => setShowConfirm(false), 2000)
       }
     } catch (e) {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Unable to create appointment. Please check your connection.')
-      setTimeout(() => setShowConfirm(false), 5000)
+      setTimeout(() => setShowConfirm(false), 2000)
     }
   }
 
@@ -273,14 +315,14 @@ export default function StudentLanding() {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Please select a cancellation reason.')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
       return
     }
     if (type === 'others' && !otherText) {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Please provide details for "Others".')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
       return
     }
     const reasonMap = {
@@ -331,11 +373,10 @@ export default function StudentLanding() {
       setPendingCancelId(null)
       setCancelReasonInput('')
       setCancelReasonType('')
-      setConfirmType('success')
+      setConfirmType('cancelled')
       setShowConfirm(true)
-      setConfirmType('error')
       setConfirmMessage('Appointment cancelled')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
     })()
   }
 
@@ -352,7 +393,7 @@ export default function StudentLanding() {
       if (sessionStorage.getItem('postLoginSkeleton')) {
         sessionStorage.removeItem('postLoginSkeleton')
         setShowSkeleton(true)
-        const t = setTimeout(() => setShowSkeleton(false), 3000)
+        const t = setTimeout(() => setShowSkeleton(false), 2000)
         return () => clearTimeout(t)
       }
     } catch (e) {}
@@ -520,7 +561,10 @@ export default function StudentLanding() {
           </div>
           <div className="section-divider" />
           <div className="appointments-content">
-                {appointments.filter(a => (a.status || '').toLowerCase() === 'pending').length === 0 ? (
+                {appointments.filter(a => {
+                  const s = (a.status || '').toLowerCase()
+                  return s === 'pending' || s === 'approved' || s === 'rescheduled' || s === 'confirmed'
+                }).length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">
                   <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -534,9 +578,12 @@ export default function StudentLanding() {
               </div>
             ) : (
               <div className="appointment-cards">
-                {appointments.filter(a => (a.status || '').toLowerCase() === 'pending').map(apt => {
-                  const s = (apt.status||'').toLowerCase()
-                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
+                {appointments.filter(a => {
+                  const s = (a.status || '').toLowerCase()
+                  return s === 'pending' || s === 'approved' || s === 'rescheduled' || s === 'confirmed'
+                }).map(apt => {
+                  const cardStatus = getAppointmentStatusKey(apt)
+                  const label = getAppointmentStatusLabel(apt)
                   return (
                   <div key={apt.id} className={`appointment-card card-${cardStatus}`} onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true); }} style={{cursor:'pointer'}}>
                     <div className="apt-header">
@@ -545,17 +592,19 @@ export default function StudentLanding() {
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
-                          {((apt.status||'').toLowerCase() === 'pending') ? 'Pending for approval' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : apt.status}
-                        </span>
-                        {(apt.status||'').toLowerCase() === 'pending' && (
-                          <span
-                            className="cancel-btn"
-                            onClick={() => handleCancel(apt.id)}
-                            title="Cancel appointment"
-                          >
-                            🗑
+                        {label && (
+                          <span className={`status-badge status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                            {label}
                           </span>
+                        )}
+                        {((apt.status||'').toLowerCase() === 'pending' || (apt.status||'').toLowerCase() === 'approved' || (apt.status||'').toLowerCase() === 'rescheduled' || (apt.status||'').toLowerCase() === 'confirmed') && (
+                          <span
+                              className="cancel-btn"
+                              onClick={(e) => { e.stopPropagation(); handleCancel(apt.id); }}
+                              title="Cancel appointment"
+                            >
+                              <Trash2 size={16} />
+                            </span>
                         )}
                       </div>
                     </div>
@@ -581,49 +630,65 @@ export default function StudentLanding() {
                   {selectedAppointment.name ? (
                     <img src={`/Images/${selectedAppointment.name}.png`} alt={selectedAppointment.name} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',marginRight:12}} onError={(e)=>{ e.currentTarget.style.display='none' }} />
                   ) : null}
-                  <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
-                  {selectedAppointment.studentId && <div className="details-id">Student ID: {selectedAppointment.studentId}</div>}
+                  <div>
+                    <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
+                    <div className="details-meta">
+                      {selectedAppointment.course && <div className="details-course">{selectedAppointment.course}</div>}
+                      {selectedAppointment.studentId && <div className="details-id">ID: {selectedAppointment.studentId}</div>}
+                    </div>
+                  </div>
                 </div>
-                <div className={`details-status status-text ${((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase())) ? 'status-ongoing' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'status-approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'status-pending' : ''}`}>
-                  {((selectedAppointment.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ? 'On Going' : ((selectedAppointment.status||'').toLowerCase() === 'approved') ? 'Approved' : ((selectedAppointment.status||'').toLowerCase() === 'pending') ? 'Pending' : selectedAppointment.status)}
-                </div>
+                {(() => {
+                  const label = getAppointmentStatusLabel(selectedAppointment)
+                  if (!label) return null
+                  return (
+                    <div className={`details-status status-badge status-${getAppointmentStatusKey(selectedAppointment)}`}> 
+                      {label}
+                    </div>
+                  )
+                })()}
               </div>
 
               <div className="details-section">
-                <h3>Reason:</h3>
+                <h3>Reason for appointment</h3>
                 <p>{selectedAppointment.reason}</p>
               </div>
 
               <div className="details-section">
-                <h3>Schedule Date:</h3>
-                <p>{(selectedAppointment.iso || selectedAppointment.date) ? selectedAppointment.iso || selectedAppointment.date : ''}{selectedAppointment.start ? ' at ' + selectedAppointment.start : ''}{selectedAppointment.end ? ' to ' + selectedAppointment.end : ''}</p>
+                <h3>Schedule details</h3>
+                <div className="details-schedule-card">
+                  <div className="schedule-icon"><Calendar size={18} /></div>
+                  <div>
+                    <div className="schedule-date">{formatPrettyDate(selectedAppointment.iso || selectedAppointment.date)}</div>
+                    <div className="schedule-time">{selectedAppointment.start ? `${selectedAppointment.start}${selectedAppointment.end ? ` - ${selectedAppointment.end}` : ''}` : ''}</div>
+                  </div>
+                </div>
               </div>
 
-              {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (selectedAppointment.cancelReason || selectedAppointment.cancel_reason || selectedAppointment.cancelled_reason) && (
-                <div className="details-section">
-                  <h3>Cancellation reason:</h3>
-                  <p>{selectedAppointment.cancelReason || selectedAppointment.cancel_reason || selectedAppointment.cancelled_reason}</p>
-                </div>
-              )}
-
               {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (
-                <div className="details-section">
-                  <h3>Cancelled by:</h3>
-                  <p>{getCancelledByDisplay(selectedAppointment)}</p>
-                </div>
-              )}
-
-              {((selectedAppointment.status||'').toLowerCase() === 'cancelled') && (
-                <div className="details-section">
-                  <h3>Cancelled at:</h3>
-                  <p>{formatCancelledAt(selectedAppointment) || selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at_ts || selectedAppointment.cancelled_at_iso || '—'}</p>
+                <div className="details-section cancellation-details">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Cancellation Details</h3>
+                  <div className="space-y-3">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-gray-700">Reason:</span>
+                      <span className="text-base text-gray-600">{selectedAppointment.cancelReason || selectedAppointment.cancel_reason || selectedAppointment.cancelled_reason || 'No reason provided'}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-gray-700">Cancelled by:</span>
+                      <span className="text-base text-gray-600">{getCancelledByDisplay(selectedAppointment)}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-gray-700">Cancelled at:</span>
+                      <span className="text-base text-gray-600">{formatCancelledAt(selectedAppointment) || selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || '—'}</span>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {selectedAppointment.status === 'declined' && selectedAppointment.adminNote && (
                 <div className="details-section">
-                  <h3>Decline reason:</h3>
-                  <p>{selectedAppointment.adminNote}</p>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Decline reason:</h3>
+                  <p className="text-base text-gray-600">{selectedAppointment.adminNote}</p>
                 </div>
               )}
 
@@ -644,7 +709,10 @@ export default function StudentLanding() {
           </div>
           <div className="section-divider" />
           <div className="history-content">
-            {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').length === 0 ? (
+            {appointments.filter(a => {
+              const s = (a.status || '').toLowerCase()
+              return s === 'completed' || s === 'done' || s === 'cancelled' || s === 'declined'
+            }).length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon history-icon">
                   <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -656,9 +724,12 @@ export default function StudentLanding() {
               </div>
             ) : (
               <div className="appointment-cards">
-                {appointments.filter(a => (a.status || '').toLowerCase() !== 'pending').map(apt => {
-                  const s = (apt.status||'').toLowerCase()
-                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
+                {appointments.filter(a => {
+                  const s = (a.status || '').toLowerCase()
+                  return s === 'completed' || s === 'done' || s === 'cancelled' || s === 'declined'
+                }).map(apt => {
+                  const cardStatus = getAppointmentStatusKey(apt)
+                  const label = getAppointmentStatusLabel(apt)
                   return (
                   <div key={apt.id} className={`appointment-card card-${cardStatus}`} onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true); }} style={{cursor:'pointer'}}>
                     <div className="apt-header">
@@ -667,9 +738,11 @@ export default function StudentLanding() {
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={`status-text status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
-                          {((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : apt.status}
-                        </span>
+                        {label && (
+                          <span className={`status-badge status-${cardStatus} ${isAppointmentOngoing(apt) ? 'status-ongoing' : ''}`}>
+                            {label}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="apt-reason-section">

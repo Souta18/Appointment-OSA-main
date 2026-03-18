@@ -170,7 +170,7 @@ export default function GuestDashboard() {
             setConfirmType('error')
             setShowConfirm(true)
             setConfirmMessage('An appointment already exists for that date and time. Please choose a different time.')
-            setTimeout(() => setShowConfirm(false), 5000)
+            setTimeout(() => setShowConfirm(false), 2000)
             return
           }
         }
@@ -219,24 +219,24 @@ export default function GuestDashboard() {
           setConfirmType('success')
           setShowConfirm(true)
           setConfirmMessage('Appointment requested successfully!')
-          setTimeout(() => setShowConfirm(false), 3000)
+          setTimeout(() => setShowConfirm(false), 2000)
         } else {
           setConfirmType('error')
           setShowConfirm(true)
           setConfirmMessage(res?.error || 'Unable to create appointment. It will remain visible locally until resolved.')
-          setTimeout(() => setShowConfirm(false), 5000)
+          setTimeout(() => setShowConfirm(false), 2000)
         }
       } catch (e) {
         setConfirmType('error')
         setShowConfirm(true)
         setConfirmMessage('Unable to create appointment. Please check your connection.')
-        setTimeout(() => setShowConfirm(false), 5000)
+        setTimeout(() => setShowConfirm(false), 2000)
       }
     } catch (e) {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Unable to process appointment. Please try again.')
-      setTimeout(() => setShowConfirm(false), 5000)
+      setTimeout(() => setShowConfirm(false), 2000)
     }
   }
 
@@ -339,14 +339,14 @@ export default function GuestDashboard() {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Please select a cancellation reason.')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
       return
     }
     if (type === 'others' && !otherText) {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Please provide details for "Others".')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
       return
     }
 
@@ -385,15 +385,15 @@ export default function GuestDashboard() {
       setCancelReasonType('')
       setCancelReasonInput('')
       setPendingCancelId(null)
-      setConfirmType('error')
+      setConfirmType('cancelled')
       setShowConfirm(true)
       setConfirmMessage('Appointment cancelled')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
     } catch (e) {
       setConfirmType('error')
       setShowConfirm(true)
       setConfirmMessage('Failed to cancel appointment')
-      setTimeout(() => setShowConfirm(false), 3000)
+      setTimeout(() => setShowConfirm(false), 2000)
     }
   }
 
@@ -442,103 +442,107 @@ export default function GuestDashboard() {
           <p>View your appointments, statuses, and book new consultations.</p>
         </header>
 
-        <section className="appointments-section">
-          <div className="section-header">
-            <div>
-              <h2>My Appointments</h2>
-              <p className="section-subtitle">Manage your OSA appointments</p>
+        <div className="guest-grid">
+          <section className="appointments-section">
+            <div className="section-header">
+              <div>
+                <h2>My Appointments</h2>
+                <p className="section-subtitle">Manage your OSA appointments</p>
+              </div>
+              <button
+                className="btn-appointment"
+                onClick={() => setShowBookingModal(true)}
+              >
+                <span className="add-icon">+</span>
+                Book Appointment
+              </button>
             </div>
-            <button
-              className="btn-appointment"
-              onClick={() => setShowBookingModal(true)}
-            >
-              <span className="add-icon">+</span>
-              Book Appointment
-            </button>
-          </div>
-          <div className="section-divider" />
-          <div className="appointments-content">
-            {showSkeleton ? (
-              <div style={{padding:'2rem'}}>
-                <div className="skeleton-row">
-                  <div className="skeleton-circle" />
-                  <div style={{flex:1}}>
-                    <div className="skeleton-line" style={{width:'40%'}} />
-                    <div className="skeleton-line" style={{width:'70%', marginTop:8}} />
+            <div className="section-divider" />
+            <div className="appointments-content">
+              {showSkeleton ? (
+                <div style={{padding:'2rem'}}>
+                  <div className="skeleton-row">
+                    <div className="skeleton-circle" />
+                    <div style={{flex:1}}>
+                      <div className="skeleton-line" style={{width:'40%'}} />
+                      <div className="skeleton-line" style={{width:'70%', marginTop:8}} />
+                    </div>
+                  </div>
+                  <div style={{marginTop:20}}>
+                    <div className="skeleton-line" style={{width:'100%', height:18}} />
+                    <div className="skeleton-line" style={{width:'100%', height:18, marginTop:8}} />
+                    <div className="skeleton-line" style={{width:'60%', height:18, marginTop:8}} />
                   </div>
                 </div>
-                <div style={{marginTop:20}}>
-                  <div className="skeleton-line" style={{width:'100%', height:18}} />
-                  <div className="skeleton-line" style={{width:'100%', height:18, marginTop:8}} />
-                  <div className="skeleton-line" style={{width:'60%', height:18, marginTop:8}} />
+              ) : pendingAppointments.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">
+                    <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </div>
+                  <p>No upcoming appointments yet — click below to request your first.</p>
+                  <button className="btn-appointment btn-appointment--ghost" onClick={() => setShowBookingModal(true)}>
+                    Book your first appointment
+                  </button>
                 </div>
-              </div>
-            ) : pendingAppointments.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  <svg width="98" height="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </div>
-                <p>No Appointments</p>
-              </div>
-            ) : (
-              <div className="appointment-cards">
-                {pendingAppointments.map(apt => {
-                  const s = (apt.status || '').toLowerCase()
-                  const cardStatus = s === 'confirmed' ? 'rescheduled' : s
-                  return (
-                    <div
-                      key={apt.id}
-                      className={`appointment-card card-${cardStatus}`}
-                      onClick={() => handleViewDetails(apt)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="apt-header">
-                        <div className="apt-title-section">
-                          <div className="apt-title">{apt.reason}</div>
-                          <div className="apt-datetime">{apt.date} at {apt.time}</div>
-                        </div>
-                        <div className="apt-header-actions">
-                          <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
-                            {(apt.status === 'pending') ? 'Pending for approval' : 
-                             (apt.status === 'approved') ? 'Approved' : 
-                             (apt.status === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : 
-                             (apt.status === 'rescheduled') ? 'Rescheduled' : 
-                             (apt.status === 'declined') ? 'Declined' : 
-                             (apt.status === 'done' || apt.status === 'completed') ? 'Completed' : 
-                             (apt.status === 'cancelled') ? 'Cancelled' : apt.status}
-                          </span>
-                          {apt.status === 'pending' && (
-                            <span
-                              className="cancel-btn"
-                              onClick={(e) => { e.stopPropagation(); handleCancel(apt.id) }}
-                              title="Cancel appointment"
-                            >
-                              🗑
+              ) : (
+                <div className="appointment-cards">
+                  {pendingAppointments.map(apt => {
+                    const s = (apt.status || '').toLowerCase()
+                    const cardStatus = s === 'confirmed' ? 'rescheduled' : s
+                    return (
+                      <div
+                        key={apt.id}
+                        className={`appointment-card card-${cardStatus}`}
+                        onClick={() => handleViewDetails(apt)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className="apt-header">
+                          <div className="apt-title-section">
+                            <div className="apt-title">{apt.reason}</div>
+                            <div className="apt-datetime">{apt.date} at {apt.time}</div>
+                          </div>
+                          <div className="apt-header-actions">
+                            <span className={"status-badge status-badge--" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-badge--ongoing' : '')}>
+                              {(apt.status === 'pending') ? 'Pending for approval' : 
+                               (apt.status === 'approved') ? 'Approved' : 
+                               (apt.status === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : 
+                               (apt.status === 'rescheduled') ? 'Rescheduled' : 
+                               (apt.status === 'declined') ? 'Declined' : 
+                               (apt.status === 'done' || apt.status === 'completed') ? 'Completed' : 
+                               (apt.status === 'cancelled') ? 'Cancelled' : apt.status}
                             </span>
-                          )}
+                            {apt.status === 'pending' && (
+                              <span
+                                className="cancel-btn"
+                                onClick={(e) => { e.stopPropagation(); handleCancel(apt.id) }}
+                                title="Cancel appointment"
+                              >
+                                🗑
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="apt-reason-section">
+                          <span className="apt-reason-label">Reason:</span>
+                          <span className="apt-reason-text">For {apt.reason}</span>
+                        </div>
+                        <div className="apt-footer">
+                          <span className="apt-submitted">
+                            Submitted on {apt.submittedAt ? (new Date(apt.submittedAt)).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}
+                          </span>
                         </div>
                       </div>
-                      <div className="apt-reason-section">
-                        <span className="apt-reason-label">Reason:</span>
-                        <span className="apt-reason-text">For {apt.reason}</span>
-                      </div>
-                      <div className="apt-footer">
-                        <span className="apt-submitted">
-                          Submitted on {apt.submittedAt ? (new Date(apt.submittedAt)).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (apt.date + ' at ' + apt.time)}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </section>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
 
         
 
@@ -574,7 +578,7 @@ export default function GuestDashboard() {
                         <div className="apt-datetime">{apt.date} at {apt.time}</div>
                       </div>
                       <div className="apt-header-actions">
-                        <span className={"status-text status-" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-ongoing' : '')}>
+                        <span className={"status-badge status-badge--" + cardStatus + (isAppointmentOngoing(apt) && !['done','completed','cancelled'].includes(((apt.status||'')+'').toLowerCase()) ? ' status-badge--ongoing' : '')}>
                           {((apt.status||'').toLowerCase() === 'cancelled') ? 'Cancelled' : ((apt.status||'').toLowerCase() === 'done' || (apt.status||'').toLowerCase() === 'completed') ? 'Completed' : ((apt.status||'').toLowerCase() === 'approved') ? 'Approved' : ((apt.status||'').toLowerCase() === 'confirmed') ? (isAppointmentOngoing(apt) ? 'On Going' : 'Rescheduled') : ((apt.status||'').toLowerCase() === 'rescheduled') ? 'Rescheduled' : ((apt.status||'').toLowerCase() === 'declined') ? 'Declined' : apt.status}
                         </span>
                       </div>
@@ -615,6 +619,7 @@ export default function GuestDashboard() {
             )}
           </div>
         </section>
+        </div>
 
         {detailsOpen && selectedAppointment && (
           <div className="details-modal-overlay" onClick={() => setDetailsOpen(false)}>
@@ -622,8 +627,16 @@ export default function GuestDashboard() {
               <div className="details-top">
                 <div className="details-main">
                   <h2 className="details-name">{selectedAppointment.name || 'Guest'}</h2>
+                  {(selectedAppointment.course || selectedAppointment.department) && (
+                    <div className="details-course text-xl font-bold text-gray-500">{selectedAppointment.course || selectedAppointment.department}</div>
+                  )}
+                  {(selectedAppointment.studentId || selectedAppointment.email) && (
+                    <div className="details-id text-gray-400 font-bold mt-1">
+                      {selectedAppointment.studentId ? `ID: ${selectedAppointment.studentId}` : selectedAppointment.email}
+                    </div>
+                  )}
                 </div>
-                <div className={`details-status status-text ${(selectedAppointment.status === 'cancelled') ? 'status-cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ) ? 'status-ongoing' : (selectedAppointment.status === 'approved') ? 'status-approved' : (selectedAppointment.status === 'pending') ? 'status-pending' : ''}`}>
+                <div className={`details-status status-badge ${(selectedAppointment.status === 'cancelled') ? 'status-badge--cancelled' : (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ) ? 'status-badge--ongoing' : (selectedAppointment.status === 'approved') ? 'status-badge--approved' : (selectedAppointment.status === 'pending') ? 'status-badge--pending' : ''}`}>
                   {(selectedAppointment.status === 'cancelled') ? 'Cancelled' : 
                    (isAppointmentOngoing(selectedAppointment) && !['done','completed','cancelled'].includes(((selectedAppointment.status||'')+'').toLowerCase()) ? 'On Going' : 
                     (selectedAppointment.status === 'approved') ? 'Approved' : 
@@ -633,19 +646,48 @@ export default function GuestDashboard() {
               </div>
 
               <div className="details-section">
-                <h3>Reason:</h3>
-                <p>{selectedAppointment.reason}</p>
+                <h3>Reason for Appointment</h3>
+                <p className="text-lg text-gray-700 font-medium leading-relaxed">{selectedAppointment.reason}</p>
               </div>
 
               <div className="details-section">
-                <h3>Scheduled Date & Time:</h3>
-                <p>{selectedAppointment.iso || selectedAppointment.date}{selectedAppointment.start ? ' at ' + selectedAppointment.start : ''}{selectedAppointment.end ? ' to ' + selectedAppointment.end : ''}</p>
+                <h3>Schedule Details</h3>
+                <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <span className="text-blue-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </span>
+                  <div>
+                    <div className="font-bold text-gray-900">{(selectedAppointment.iso || selectedAppointment.date) ? new Date(selectedAppointment.iso || selectedAppointment.date).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }) : ''}</div>
+                    <div className="text-gray-500 font-bold">{selectedAppointment.start || selectedAppointment.time}{selectedAppointment.end ? ` - ${selectedAppointment.end}` : ''}</div>
+                  </div>
+                </div>
               </div>
 
-              {selectedAppointment.status === 'cancelled' && selectedAppointment.cancelReason && (
+              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (
                 <div className="details-section">
-                  <h3>Reason for Cancellation:</h3>
-                  <p>{selectedAppointment.cancelReason}</p>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Cancellation Details</h3>
+                  {(selectedAppointment.cancelReason || selectedAppointment.cancel_reason) ? (
+                    <p className="text-lg text-gray-700 font-medium leading-relaxed">
+                      <span className="font-bold">Reason: </span>
+                      {selectedAppointment.cancelReason || selectedAppointment.cancel_reason}
+                    </p>
+                  ) : (
+                    <p className="text-lg text-gray-700 font-medium leading-relaxed">No reason provided.</p>
+                  )}
+
+                  {(selectedAppointment.cancelledByName || selectedAppointment.cancelled_by_name || selectedAppointment.cancelledBy || selectedAppointment.cancelled_by) && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      Cancelled by: {selectedAppointment.cancelledByName || selectedAppointment.cancelled_by_name || selectedAppointment.cancelledBy || selectedAppointment.cancelled_by}
+                    </p>
+                  )}
+
+                  {(selectedAppointment.cancelledAt || selectedAppointment.cancelled_at) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Cancelled at: {new Date(selectedAppointment.cancelledAt || selectedAppointment.cancelled_at).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -653,6 +695,13 @@ export default function GuestDashboard() {
                 <div className="details-section">
                   <h3>Admin Note:</h3>
                   <p>{selectedAppointment.adminNote}</p>
+                </div>
+              )}
+
+              {selectedAppointment.submittedAt && (
+                <div className="details-section">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Submission Date</h3>
+                  <p className="text-gray-600 font-bold">{new Date(selectedAppointment.submittedAt).toLocaleString()}</p>
                 </div>
               )}
 
@@ -665,12 +714,18 @@ export default function GuestDashboard() {
 
         {showCancelModal && (
           <div className="details-modal-overlay" onClick={cancelCancel}>
-            <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:520}}>
-              <h2>Cancel appointment</h2>
-              <p>Please tell us why you're cancelling</p>
-              <div style={{marginTop:12}}>
-                <label style={{display:'block', marginBottom:8}}>Cancellation Reason</label>
-                <select value={cancelReasonType} onChange={e => setCancelReasonType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #e6e6e6'}}>
+            <div className="details-modal open" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Cancel appointment</h2>
+                <p className="modal-subtitle">Please tell us why you're cancelling</p>
+              </div>
+              <div className="modal-body">
+                <label className="modal-label">Cancellation Reason</label>
+                <select
+                  className="modal-select"
+                  value={cancelReasonType}
+                  onChange={e => setCancelReasonType(e.target.value)}
+                >
                   <option value="" disabled>Select reason</option>
                   <option value="appointment_cancelled">Appointment Cancelled</option>
                   <option value="class_conflict">Class Conflict</option>
@@ -679,10 +734,15 @@ export default function GuestDashboard() {
                   <option value="others">Others</option>
                 </select>
                 {cancelReasonType === 'others' && (
-                  <textarea value={cancelReasonInput} onChange={e => setCancelReasonInput(e.target.value)} placeholder="Please provide cancellation details" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6', marginTop:12}} />
+                  <textarea
+                    className="modal-textarea"
+                    value={cancelReasonInput}
+                    onChange={e => setCancelReasonInput(e.target.value)}
+                    placeholder="Please provide cancellation details"
+                  />
                 )}
               </div>
-              <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
+              <div className="modal-footer">
                 <button className="close-btn" onClick={cancelCancel}>Back</button>
                 <button className="decline-btn" onClick={confirmCancel}>Confirm Cancel</button>
               </div>

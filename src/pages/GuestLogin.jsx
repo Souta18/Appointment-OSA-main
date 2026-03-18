@@ -45,9 +45,18 @@ export default function GuestLogin() {
   const [error, setError] = useState('')
   useEffect(() => {
     if (!error) return
-    const id = setTimeout(() => setError(''), 3000)
+    const id = setTimeout(() => setError(''), 2000)
     return () => clearTimeout(id)
   }, [error])
+
+  useEffect(() => {
+    if (Object.keys(errors).length === 0 && !showValidation) return
+    const id = setTimeout(() => {
+      setErrors({})
+      setShowValidation(false)
+    }, 2000)
+    return () => clearTimeout(id)
+  }, [errors, showValidation])
 
   useEffect(() => {
     return () => {
@@ -158,6 +167,11 @@ export default function GuestLogin() {
     <div className="guest-login-page">
     <AuthLayout side="left" subtitle="Schedule your appointments with ease.">
       <div className="auth-form guest-form">
+        <div className="auth-back auth-top" style={{ marginBottom: '1rem' }}>
+          <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+            Back
+          </Button>
+        </div>
         <div className="auth-tabs">
           <button type="button" className={view==='signin'? 'active' : ''} onClick={() => { setView('signin'); setError(''); setSignInForm((s) => ({ ...s, password: '' })); setSignUpForm((s) => ({ ...s, password: '' })); }}>Sign In</button>
           <button type="button" className={view==='signup'? 'active' : ''} onClick={() => { setView('signup'); setError(''); setSignInForm((s) => ({ ...s, password: '' })); setSignUpForm((s) => ({ ...s, password: '' })); }}>Sign Up</button>
@@ -171,8 +185,7 @@ export default function GuestLogin() {
               <Input label="Password" name="password" type="password" placeholder="Password" value={signInForm.password} onChange={handleSignInChange} error={''} />
               {error && <div className="auth-error">{error}</div>}
               <div className="guest-buttons">
-                <Button type="button" variant="secondary" onClick={() => navigate('/student/login')}>Back</Button>
-                <Button type="submit" variant="primary" loading={isSubmitting}>Sign In</Button>
+                <Button type="submit" variant="primary" className="w-full" loading={isSubmitting}>Sign In</Button>
               </div>
             </form>
           </>

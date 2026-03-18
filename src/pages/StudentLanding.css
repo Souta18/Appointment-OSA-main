@@ -85,11 +85,13 @@
 
 .appointments-section,
 .history-section {
-  background: var(--card-bg);
-  box-shadow: var(--shadow-card);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem 2rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border-radius: 24px;
+  padding: 2rem;
   margin-bottom: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .section-header {
@@ -102,16 +104,17 @@
 
 .section-header h1 {
   font-family: var(--font-montserrat);
-  font-weight: 700;
-  font-size: clamp(28px, 3vw, 39px);
-  color: var(--text-dark);
+  font-weight: 800;
+  font-size: 32px;
+  color: #1e293b;
+  letter-spacing: -0.02em;
 }
 
 .section-subtitle {
   font-family: var(--font-inter);
   font-weight: 600;
-  font-size: 21px;
-  color: var(--text-dark);
+  font-size: 16px;
+  color: #64748b;
   margin-top: 0.25rem;
 }
 
@@ -119,21 +122,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 6px 15px;
-  background: var(--button-blue);
-  color: var(--card-bg);
+  gap: 10px;
+  padding: 10px 24px;
+  background: #2563eb;
+  color: #ffffff;
   border: none;
-  border-radius: 15px;
-  box-shadow: 0px 6px 13px rgba(0, 0, 0, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
   font-family: var(--font-inter);
   font-weight: 700;
-  font-size: 17px;
+  font-size: 16px;
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-appointment:hover {
-  filter: brightness(1.1);
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
 }
 
 .add-icon {
@@ -188,233 +194,163 @@
 .appointment-card {
   display: flex;
   flex-direction: column;
-  padding: 2rem 3rem 3.5rem; /* reserve extra bottom space for footer/actions */
+  padding: 1.5rem 2rem;
   background: #ffffff;
   border: none;
-  border-radius: 15px;
-  box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
-  min-height: 140px;
+  border-radius: 20px;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
+
+.appointment-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+.card-pending::before { background: #3b82f6; }
+.card-approved::before { background: #10b981; }
+.card-rescheduled::before { background: #f59e0b; }
+.card-cancelled::before { background: #ef4444; }
+.card-completed::before { background: #6366f1; }
 
 .appointment-card:hover {
-  box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
-}
-
-.card-pending {
-  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%);
-  color: #083a66;
-  box-shadow: 0 12px 28px rgba(11,99,183,0.06);
-  padding: 2rem 3rem;
-  min-height: 160px;
-}
-
-.card-cancelled {
-  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%);
-  color: #6b2a2a;
-  box-shadow: 0 16px 40px rgba(196,30,58,0.06);
-  padding: 2rem 3rem;
-  min-height: 160px;
-  border-radius: 18px;
-}
-
-.card-done {
-  background: rgba(76, 175, 80, 0.2);
-}
-
-/* card style for completed appointments (alias for done) */
-.card-completed {
-  background: rgba(76, 175, 80, 0.12);
-}
-
-.card-approved {
-  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
+  box-shadow: 0px 12px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
 }
 
 .apt-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
   gap: 1rem;
 }
 
 .apt-header-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
-
-.apt-title-section {
-  flex: 1;
+  gap: 1rem;
 }
 
 .apt-title {
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--text-dark);
+  font-weight: 800;
+  font-size: 20px;
+  color: #1e293b;
+  letter-spacing: -0.01em;
 }
 
 .apt-datetime {
-  font-size: 14px;
-  color: var(--text-dark);
+  font-size: 15px;
+  font-weight: 600;
+  color: #64748b;
   margin-top: 0.25rem;
 }
 
 .apt-reason-section {
   display: flex;
   flex-direction: column;
-  margin-bottom: 1.5rem;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  margin-bottom: 1rem;
 }
 
 .apt-reason-label {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-dark);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
 }
 
 .apt-reason-text {
-  font-size: 14px;
-  color: var(--text-dark);
-  margin-top: 0.25rem;
-}
-
-.apt-cancel-section {
-  margin-top: 0.75rem;
-}
-.apt-cancel-label {
-  font-weight: 800;
-  font-size: 14px;
-  color: #A33131;
-  margin-bottom: 6px;
-}
-.apt-cancel-text {
-  font-size: 14px;
-  color: #7A1F1F;
-  line-height: 1.4;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 70%; /* keep room for action link */
-  display: inline-block;
-}
-
-.apt-footer {
-  margin-top: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: #334155;
+  line-height: 1.5;
 }
 
 .apt-footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-}
-
-.apt-submitted {
-  font-size: 12px;
-  color: var(--text-dark);
-}
-
-.apt-action {
-  display: flex;
-  align-items: center;
-}
-
-.apt-icon {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-}
-
-.apt-pending {
-  background: var(--primary-blue);
-}
-
-.apt-details {
-  flex: 1;
-}
-
-.apt-reason {
-  font-weight: 600;
-  font-size: 18px;
-  color: var(--nc-blue);
-}
-
-.apt-meta {
-  font-size: 14px;
-  color: var(--nc-blue);
-  margin-top: 0.25rem;
-}
-
-.apt-status {
   margin-top: 0.5rem;
 }
 
-.status-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
+.apt-submitted {
   font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.status-badge {
+  padding: 0.4rem 1rem;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
+  letter-spacing: 0.025em;
+  border: 1px solid transparent;
 }
 
 .status-pending {
-  color: #0066CC;
-  background: rgba(0, 102, 204, 0.12);
-}
-
-.status-cancelled {
-  color: #ffffff;
-  background: linear-gradient(180deg, #FF7B86, #C41E3A);
-  box-shadow: 0 8px 20px rgba(196,30,58,0.18);
-  padding: 0.4rem 0.9rem;
-  border-radius: 999px;
-}
-
-.status-done {
-  color: #2D7A2D;
-  background: rgba(45, 122, 45, 0.12);
-}
-
-/* completed status (alias for done) */
-.status-completed {
-  color: #2D7A2D;
-  background: rgba(45, 122, 45, 0.12);
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #dbeafe;
 }
 
 .status-approved {
-  color: #ffffff;
-  background: linear-gradient(180deg, #9CEB98, #2FC26A);
-  box-shadow: 0 8px 20px rgba(47,163,85,0.12);
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #d1fae5;
+}
+
+.status-rescheduled {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fef3c7;
+}
+
+.status-cancelled {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fee2e2;
+}
+
+.status-completed, .status-done {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #ede9fe;
 }
 
 .cancel-btn {
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0.5rem;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
-  transition: all 0.2s ease;
+  background: #fee2e2;
+  color: #ef4444;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  color: #C41E3A;
-  position: relative;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #fecaca;
 }
 
 .cancel-btn:hover {
-  background: rgba(255, 92, 92, 0.3);
-  transform: scale(1.1);
+  background: #fecaca;
+  transform: scale(1.1) rotate(5deg);
+  color: #dc2626;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
 }
 
 .cancel-btn:hover::after {
@@ -439,44 +375,6 @@
 
 .status-badge {
   transition: transform 0.2s ease;
-}
-
-/* Plain text status variant (no box) used on Student landing as requested */
-.status-text {
-  padding: 0;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  text-transform: none;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-/* Specific colors for text statuses */
-.status-text.status-pending { color: #60A5FA; }
-.status-text.status-cancelled { color: #A33131; }
-
-/* Ensure modal/details also show colored plain text */
-.details-status.status-pending.status-text,
-.details-status.status-cancelled.status-text {
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  color: inherit !important;
-}
-.status-text.status-approved { color: #2FC26A; }
-.status-text.status-ongoing { color: #D9730D; }
-
-/* Override modal/details boxed styles so modal shows plain text too */
-.details-status.status-cancelled,
-.details-status.status-pending,
-.details-status.status-approved {
-  background: transparent !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  color: inherit;
-  font-weight: 800;
 }
 
 .cancel-link {
@@ -510,89 +408,195 @@
 }
 .student-landing .details-modal .details-status {
   display: inline-block;
-  padding: 0.45rem 0.9rem;
+  padding: 0.5rem 1rem;
   border-radius: 12px;
   font-weight: 800;
-  font-size: 14px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
-  background: transparent;
-  color: inherit;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 .student-landing .details-modal .details-status.status-approved {
-  background: linear-gradient(180deg, #9CEB98 0%, #2FC26A 100%);
-  color: #ffffff;
-  box-shadow: 0 10px 26px rgba(47,163,85,0.12);
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #d1fae5;
 }
 .student-landing .details-modal .details-status.status-pending {
-  background: linear-gradient(180deg, #D6EEFF 0%, #A6D9FF 100%);
-  color: #003E7E;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
 }
 .student-landing .details-modal .details-status.status-ongoing {
-  background: linear-gradient(180deg, #FFE6C8 0%, #FFB76B 100%);
-  color: #7A3700;
-  box-shadow: 0 10px 26px rgba(217,120,20,0.12);
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fef3c7;
 }
 .student-landing .details-modal .details-status.status-cancelled {
-  background: linear-gradient(180deg, #FFD6D9 0%, #FF9EA6 100%);
-  color: #7A1F1F;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fee2e2;
 }
 .student-landing .details-modal .details-status.status-completed,
 .student-landing .details-modal .details-status.status-done {
-  background: linear-gradient(180deg, #DFF4E4 0%, #B6E6C2 100%);
-  color: #0E8A32;
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ede9fe;
+}
+.student-landing .details-modal .details-status.status-rescheduled {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fef3c7;
+}
+
+/* Cancellation details formatting to match admin dashboard look */
+.cancellation-details h3 {
+  color: #94a3b8 !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.1em !important;
+  margin-bottom: 1rem !important;
+}
+
+.cancellation-details .flex-col {
+  margin-bottom: 0.75rem;
+}
+
+.cancellation-details .text-gray-700 {
+  color: #334155;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.cancellation-details .text-gray-600 {
+  color: #475569;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 /* Ensure plain text status used elsewhere on student page also reflects approved color */
 .student-landing .status-text.status-approved { color: #2FC26A !important; }
 
-/* Student landing: card background per status (overrides global/admin styles) */
+/* Student landing: card background per status */
 .student-landing .card-approved {
-  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%) !important;
-  color: #0E662E !important;
-  box-shadow: 0 12px 28px rgba(47,163,85,0.06) !important;
-  border-radius: 15px;
+  background: #f0fdf4 !important;
+  color: #166534 !important;
 }
 .student-landing .card-pending {
-  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%) !important;
-  color: #083a66 !important;
-  box-shadow: 0 12px 28px rgba(11,99,183,0.04) !important;
+  background: #eff6ff !important;
+  color: #1e40af !important;
 }
 .student-landing .card-cancelled {
-  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%) !important;
-  color: #7A1F1F !important;
-  box-shadow: 0 12px 28px rgba(196,30,58,0.04) !important;
+  background: #fef2f2 !important;
+  color: #991b1b !important;
 }
 .student-landing .card-completed,
 .student-landing .card-done {
-  background: linear-gradient(180deg, #CFF8D6 0%, #8EDB8C 100%) !important;
-  color: #0E8A32 !important;
-  box-shadow: 0 12px 28px rgba(14,138,50,0.06) !important;
+  background: #f5f3ff !important;
+  color: #5b21b6 !important;
+}
+.student-landing .card-rescheduled {
+  background: #fffbeb !important;
+  color: #854d0e !important;
 }
 
-/* Rescheduled (use same visual as admin: soft yellow) */
-.student-landing .card-rescheduled {
-  background: #FFFBEB !important;
-  color: #7A4A12 !important;
-  box-shadow: 0 12px 28px rgba(186,134,0,0.04) !important;
-  border-radius: 15px;
+/* Side indicators */
+.student-landing .card-approved::before { background: #10b981 !important; }
+.student-landing .card-pending::before { background: #3b82f6 !important; }
+.student-landing .card-cancelled::before { background: #ef4444 !important; }
+.student-landing .card-completed::before { background: #6366f1 !important; }
+.student-landing .card-rescheduled::before { background: #f59e0b !important; }
+
+/* Status badge color for rescheduled */
+.student-landing .status-badge.status-rescheduled {
+  background: rgba(254,243,199,1) !important;
+  color: #92400e !important;
+  box-shadow: 0 12px 28px rgba(186,134,0,0.12) !important;
 }
 
 /* Status text color for rescheduled */
 .student-landing .status-text.status-rescheduled { color: #B45309 !important; }
 
-/* Details modal badge for rescheduled */
-.student-landing .details-modal .details-status.status-rescheduled {
-  background: rgba(251,191,36,0.12);
-  color: #B45309;
-  padding: 0.45rem 0.9rem;
-  border-radius: 12px;
-  font-weight: 800;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+/* Ensure status text colors on student page match requested colors */
+.student-landing .status-badge.status-pending { background: #eff6ff; color: #1d4ed8; }
+.student-landing .status-badge.status-approved { background: #ecfdf5; color: #047857; }
+.student-landing .status-badge.status-completed,
+.student-landing .status-badge.status-done { background: #f5f3ff; color: #6d28d9; }
+.student-landing .status-badge.status-cancelled { background: #fef2f2; color: #b91c1c; }
+
+/* Details modal refinements */
+.student-landing .details-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
-/* Ensure status text colors on student page match requested colors */
-.student-landing .status-text.status-pending { color: #60A5FA !important; }
-.student-landing .status-text.status-approved { color: #2FC26A !important; }
-.student-landing .status-text.status-completed,
-.student-landing .status-text.status-done { color: #0E8A32 !important; }
-.student-landing .status-text.status-cancelled { color: #A33131 !important; }
+.student-landing .details-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.student-landing .details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  color: rgba(0,0,0,0.65);
+  font-size: 14px;
+}
+
+.student-landing .details-course {
+  font-weight: 700;
+}
+
+.student-landing .details-id {
+  font-weight: 600;
+}
+
+.student-landing .details-section h3 {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(0,0,0,0.6);
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.student-landing .details-section p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(0,0,0,0.8);
+  margin: 0;
+}
+
+.student-landing .details-schedule-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255,255,255,0.9);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.08);
+}
+
+.student-landing .schedule-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: rgba(96, 165, 250, 0.15);
+  border-radius: 14px;
+  color: #2563eb;
+}
+
+.student-landing .schedule-date {
+  font-weight: 700;
+  font-size: 16px;
+  color: rgba(0,0,0,0.9);
+}
+
+.student-landing .schedule-time {
+  font-size: 14px;
+  color: rgba(0,0,0,0.65);
+  margin-top: 0.15rem;
+}

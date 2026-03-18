@@ -162,10 +162,17 @@ export async function updateAppointmentStatus(id, status, extra = {}, includeAut
   }
 }
 
-export async function requestReschedule(id, date, start, end, reason) {
+export async function requestReschedule(id, date, start, end, reason, email) {
   try {
     if (!id || !date) return { ok: false, error: 'Missing appointment ID or date' }
-    return await updateAppointmentStatus(id, 'pending', { rescheduleDate: date, rescheduleStart: start, rescheduleEnd: end, rescheduleReason: reason })
+    const payload = {
+      rescheduleDate: date,
+      rescheduleStart: start,
+      rescheduleEnd: end,
+      rescheduleReason: reason
+    }
+    if (email) payload.requesterEmail = email
+    return await updateAppointmentStatus(id, 'pending', payload)
   } catch (e) {
     return { ok: false, error: 'Unable to connect. Please check your internet connection and try again.' }
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
@@ -15,16 +15,27 @@ export default function StudentChangePassword() {
   })
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (!error) return
+    const id = setTimeout(() => setError(''), 2000)
+    return () => clearTimeout(id)
+  }, [error])
+
   if (!studentNumber) {
     navigate('/student/forgot-password', { replace: true })
   }
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
+    setError('')
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (!form.password || !form.confirmPassword) {
+      setError('Please fill in all required fields.')
+      return
+    }
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match.')
       return
@@ -36,6 +47,11 @@ export default function StudentChangePassword() {
   return (
     <AuthLayout side="right" subtitle="Create a new password">
       <div className="auth-form">
+        <div className="auth-back auth-top">
+          <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+            Back
+          </Button>
+        </div>
         <h2 className="auth-title">Change Password</h2>
         <p className="auth-subtitle-text">
           Set a strong password to secure your account.
@@ -63,6 +79,7 @@ export default function StudentChangePassword() {
         <p className="auth-footer">
           Remembered your password? <Link to="/student/login">Sign in</Link>
         </p>
+
       </div>
     </AuthLayout>
   )

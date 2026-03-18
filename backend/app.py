@@ -247,6 +247,8 @@ def create_app():
                 add.append("ADD COLUMN reschedule_end_time TIME NULL")
             if 'reschedule_reason' not in existing:
                 add.append("ADD COLUMN reschedule_reason VARCHAR(500) NULL")
+            if 'reschedule_requester_email' not in existing:
+                add.append("ADD COLUMN reschedule_requester_email VARCHAR(100) NULL")
             if add:
                 conn.execute(text(f"ALTER TABLE appointments {', '.join(add)}"))
 
@@ -1009,8 +1011,11 @@ def create_app():
                         "rescheduleStart": (fmt_time(getattr(r, 'reschedule_start_time', None)) if getattr(r, 'reschedule_start_time', None) else ""),
                         "rescheduleEnd": (fmt_time(getattr(r, 'reschedule_end_time', None)) if getattr(r, 'reschedule_end_time', None) else ""),
                         "rescheduleReason": (getattr(r, 'reschedule_reason', None) or ""),
+                        "rescheduleRequesterEmail": (getattr(r, 'reschedule_requester_email', None) or ""),
                         "cancelledAt": (_iso_utc(getattr(r, 'cancelled_at', None)) if getattr(r, 'cancelled_at', None) else ""),
                         "cancelReason": (getattr(r, 'cancel_reason', None) or ""),
+                        "cancelledBy": (getattr(r, 'cancelled_by', None) or ""),
+                        "cancelledByName": (lambda cb: ("Admin" if cb == "admin" else "Student" if cb == "student" else "Guest" if cb == "guest" else "Unknown"))(getattr(r, 'cancelled_by', None)),
                         "adminNote": (getattr(r, 'admin_note', None) or ""),
                         "guest": bool(r.guest_id) or bool(r.is_walkin)
                     })
@@ -1251,16 +1256,23 @@ def create_app():
                         obj.status = 'cancelled'
                         obj.cancelled_at = _dt.utcnow()
                         # who cancelled
-                        if is_admin_action:
-                            obj.cancelled_by = 'admin'
+                        # Determine who cancelled
+                        # Prefer explicit provided value (frontend should send this for admin cancel flows)
+                        explicit_cancelled_by = (body.get('cancelled_by') or body.get('cancelledBy') or '').strip()
+                        if explicit_cancelled_by:
+                            obj.cancelled_by = explicit_cancelled_by
                         else:
-                            # infer from appointment linkage
-                            if getattr(obj, 'student_id', None):
-                                obj.cancelled_by = 'student'
-                            elif getattr(obj, 'guest_id', None) or getattr(obj, 'is_walkin', False):
-                                obj.cancelled_by = 'guest'
+                            if is_admin_action:
+                                obj.cancelled_by = 'admin'
                             else:
-                                obj.cancelled_by = 'unknown'
+                                # infer from appointment linkage
+                                if getattr(obj, 'student_id', None):
+                                    obj.cancelled_by = 'student'
+                                elif getattr(obj, 'guest_id', None) or getattr(obj, 'is_walkin', False):
+                                    obj.cancelled_by = 'guest'
+                                else:
+                                    obj.cancelled_by = 'unknown'
+
                         # record optional cancellation reason if provided
                         cr = body.get('cancelReason') or body.get('cancel_reason') or ''
                         if cr:
@@ -1275,6 +1287,7 @@ def create_app():
                             obj.reschedule_start_time = None
                             obj.reschedule_end_time = None
                             obj.reschedule_reason = None
+                            obj.reschedule_requester_email = None
                     else:
                         # clear cancelled_at when setting other statuses
                         obj.status = status
@@ -1299,6 +1312,7 @@ def create_app():
                 res_start_raw = body.get('rescheduleStart') or body.get('reschedule_start')
                 res_end_raw = body.get('rescheduleEnd') or body.get('reschedule_end')
                 res_reason = body.get('rescheduleReason') or body.get('reschedule_reason')
+                requester_email = (body.get('requesterEmail') or body.get('requester_email') or "").strip()
                 approve_res = body.get('approveReschedule') or body.get('approve_reschedule')
 
                 # If client is requesting a reschedule proposal
@@ -1386,6 +1400,16 @@ def create_app():
                         obj.reschedule_reason = str(res_reason)[:500] if res_reason else None
                     except Exception:
                         obj.reschedule_reason = None
+
+                    # Store who requested the reschedule (student/guest admin): prefer explicit payload
+                    if requester_email:
+                        obj.reschedule_requester_email = requester_email
+                    else:
+                        try:
+                            obj.reschedule_requester_email = (obj.student.email if getattr(obj, 'student', None) else (obj.guest.email if getattr(obj, 'guest', None) else None))
+                        except Exception:
+                            obj.reschedule_requester_email = None
+
                     # Mark appointment as rescheduled (proposal) — requires admin approval to become confirmed/ongoing
                     obj.status = 'rescheduled'
 
@@ -1409,6 +1433,7 @@ def create_app():
                         obj.reschedule_start_time = None
                         obj.reschedule_end_time = None
                         obj.reschedule_reason = None
+                        obj.reschedule_requester_email = None
 
                 s.add(obj)
                 s.commit()

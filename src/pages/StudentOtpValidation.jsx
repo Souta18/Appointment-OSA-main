@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
@@ -10,6 +10,13 @@ export default function StudentOtpValidation() {
   const location = useLocation()
   const studentNumber = location.state?.studentNumber
   const [otp, setOtp] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!error) return
+    const id = setTimeout(() => setError(''), 2000)
+    return () => clearTimeout(id)
+  }, [error])
 
   if (!studentNumber) {
     navigate('/student/forgot-password', { replace: true })
@@ -17,12 +24,25 @@ export default function StudentOtpValidation() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (!otp) {
+      setError('OTP is required')
+      return
+    }
+    if (otp.length < 6) {
+      setError('Invalid OTP code')
+      return
+    }
     navigate('/student/change-password', { state: { studentNumber } })
   }
 
   return (
     <AuthLayout side="right" subtitle="Verify your account">
       <div className="auth-form">
+        <div className="auth-back auth-top">
+          <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+            Back
+          </Button>
+        </div>
         <h2 className="auth-title">OTP Verification</h2>
         <p className="auth-subtitle-text">
           We have sent a one-time password to your registered email or contact number.
@@ -32,7 +52,8 @@ export default function StudentOtpValidation() {
             label="Enter OTP"
             placeholder="6-digit code *"
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => { setOtp(e.target.value); setError('') }}
+            error={error}
           />
           <Button type="submit" className="w-full">Verify</Button>
         </form>

@@ -11,12 +11,30 @@ export default function AdminLogin() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const errorTimer = useRef(null)
+
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) return
+    const id = setTimeout(() => setErrors({}), 2000)
+    return () => clearTimeout(id)
+  }, [errors])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setErrors({})
+
+    const newErrors = {}
+    if (!username) newErrors.username = 'Username is required'
+    if (!password) newErrors.password = 'Password is required'
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
     const start = Date.now()
     setIsSubmitting(true)
     let res
@@ -36,7 +54,7 @@ export default function AdminLogin() {
     } else {
       if (errorTimer.current) clearTimeout(errorTimer.current)
       setError('Invalid credentials')
-      errorTimer.current = setTimeout(() => setError(''), 3000)
+      errorTimer.current = setTimeout(() => setError(''), 2000)
     }
   }
 
@@ -58,6 +76,11 @@ export default function AdminLogin() {
       </div>
 
       <div className="admin-login-container">
+        <div className="auth-back auth-top" style={{ marginBottom: '1rem' }}>
+          <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+            Back
+          </Button>
+        </div>
         <p className="admin-osa admin-subtitle">Sign in to your account</p>
         <div className="admin-divider" aria-hidden="true" />
 
@@ -66,7 +89,8 @@ export default function AdminLogin() {
             label="Username"
             placeholder="e.g. admin@domain.edu"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => { setUsername(e.target.value); setErrors(prev => ({ ...prev, username: '' })) }}
+            error={errors.username}
           />
 
           <Input
@@ -74,7 +98,8 @@ export default function AdminLogin() {
             type="password"
             placeholder="Enter your password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })) }}
+            error={errors.password}
           />
 
           {error && <div className="admin-error" role="alert">{error}</div>}

@@ -17,6 +17,11 @@ export default function StudentForgotPassword() {
   return (
     <AuthLayout side="right" subtitle="Reset your password">
       <div className="auth-form">
+        <div className="auth-back auth-top">
+          <Button type="button" variant="secondary" onClick={() => navigate('/student/login')}>
+            Back
+          </Button>
+        </div>
         <h2 className="auth-title">Forgot Password</h2>
         <p className="auth-subtitle-text">
           Enter your registered student number to receive a one-time password (OTP).
@@ -33,6 +38,12 @@ export default function StudentForgotPassword() {
         <p className="auth-footer">
           Remembered your password? <Link to="/student/login">Sign in</Link>
         </p>
+
+        <div className="auth-back auth-bottom">
+          <Button type="button" variant="secondary" onClick={() => navigate('/student/login')}>
+            Back
+          </Button>
+        </div>
       </div>
     </AuthLayout>
   )

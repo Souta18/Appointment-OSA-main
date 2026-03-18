@@ -1,9 +1,9 @@
 /* Guest Dashboard - Enhanced styling matching StudentLanding */
 .guest-dashboard {
   min-height: 100vh;
-  background: linear-gradient(0deg, rgba(61, 63, 68, 0.59), rgba(61, 63, 68, 0.59));
+  background: linear-gradient(0deg, rgba(61, 63, 68, 0.45), rgba(61, 63, 68, 0.45));
   background-image: 
-    linear-gradient(0deg, rgba(61, 63, 68, 0.59), rgba(61, 63, 68, 0.59)),
+    linear-gradient(0deg, rgba(61, 63, 68, 0.35), rgba(61, 63, 68, 0.35)),
     url('../../Images/NCbluebg.png');
   background-size: cover;
   background-position: center;
@@ -17,9 +17,29 @@
 }
 
 .guest-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  padding: 2.2rem 1.5rem;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
   color: #fff;
   margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.guest-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+}
+
+@media (max-width: 980px) {
+  .guest-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .guest-hero h1 {
@@ -38,10 +58,11 @@
 }
 
 .appointments-section {
-  background: var(--card-bg);
-  box-shadow: var(--shadow-card);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem 2rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.08);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
   margin-bottom: 2rem;
 }
 
@@ -92,6 +113,17 @@
   transform: translateY(-2px);
 }
 
+.btn-appointment--ghost {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--card-bg);
+}
+
+.btn-appointment--ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
 .add-icon {
   font-size: 20px;
   line-height: 1;
@@ -131,54 +163,49 @@
 .empty-state p {
   font-family: var(--font-montserrat);
   font-weight: 500;
-  font-size: 24px;
+  font-size: 22px;
   color: var(--text-dark);
-  margin: 0;
+  margin: 0 0 1rem;
+  max-width: 360px;
+  text-align: center;
 }
 
 .appointment-cards {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
+  margin-top: 0.5rem;
 }
 
 .appointment-card {
   display: flex;
   flex-direction: column;
-  padding: 2rem 3rem;
-  background: #ffffff;
-  border: none;
-  border-radius: 15px;
-  box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  padding: 1.75rem 1.75rem;
+  background: #E0F2FE;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-left: 4px solid transparent;
+  border-radius: 18px;
+  box-shadow: 0px 12px 24px rgba(15, 23, 42, 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   min-height: 140px;
 }
 
 .appointment-card:hover {
-  box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: 0px 16px 30px rgba(15, 23, 42, 0.18);
   transform: translateY(-2px);
 }
 
-.card-pending {
-  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%);
-  color: #083a66;
-  box-shadow: 0 12px 28px rgba(11, 99, 183, 0.06);
-}
+.card-pending { border-left-color: #3B82F6; }
+.card-approved { border-left-color: #10B981; }
+.card-cancelled { border-left-color: #DC2626; }
+.card-completed,
+.card-done { border-left-color: #0EA5E9; }
+.card-rescheduled { border-left-color: #F59E0B; }
+.card-declined { border-left-color: #B45309; }
 
-.card-cancelled {
-  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%);
-  color: #6b2a2a;
-  box-shadow: 0 16px 40px rgba(196, 30, 58, 0.06);
-  border-radius: 18px;
-}
-
-.card-done,
-.card-completed {
-  background: rgba(76, 175, 80, 0.12);
-}
-
-.card-approved {
-  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
+/* Make status badge hover/ elevation for better visibility */
+.status-badge {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
 }
 
 .apt-header {
@@ -242,70 +269,32 @@
   color: var(--text-dark);
 }
 
-.status-text {
-  padding: 0;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  text-transform: none;
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-dark);
+}
+
+.status-badge--pending { color: #1D4ED8; background: rgba(59, 130, 246, 0.12); }
+.status-badge--approved { color: #047857; background: rgba(16, 185, 129, 0.12); }
+.status-badge--cancelled { color: #B91C1C; background: rgba(220, 38, 38, 0.12); }
+.status-badge--ongoing { color: #C2410C; background: rgba(245, 158, 11, 0.12); }
+.status-badge--rescheduled { color: #B45309; background: rgba(245, 158, 11, 0.12); }
+.status-badge--completed { color: #0F766E; background: rgba(20, 184, 166, 0.12); }
+.status-badge--done { color: #0F766E; background: rgba(20, 184, 166, 0.12); }
+.status-badge--declined { color: #7C2D12; background: rgba(185, 28, 28, 0.12); }
+
+.details-status {
   font-weight: 700;
   font-size: 14px;
-}
-
-.status-text.status-pending {
-  color: #60A5FA;
-}
-
-.status-text.status-cancelled {
-  color: #A33131;
-}
-
-.status-text.status-approved {
-  color: #2FC26A;
-}
-
-/* Rescheduled (soft yellow like student view) */
-.card-rescheduled {
-  background: #FFFBEB;
-  color: #7A4A12;
-  box-shadow: 0 12px 28px rgba(186,134,0,0.04);
-  border-radius: 15px;
-}
-
-.status-text.status-rescheduled { color: #B45309; }
-
-.details-status.status-rescheduled { color: #B45309; }
-
-/* Stronger specificity so card backgrounds reliably override the base .appointment-card style */
-.appointment-card.card-pending {
-  background: linear-gradient(180deg, #E6F7FF 0%, #D6F0FF 100%);
-  color: #083a66;
-  box-shadow: 0 12px 28px rgba(11,99,183,0.04);
-}
-.appointment-card.card-approved {
-  background: linear-gradient(180deg, #E9FFEE 0%, #CFF8D6 100%);
-  color: #0E662E;
-  box-shadow: 0 12px 28px rgba(47,163,85,0.06);
-}
-.appointment-card.card-cancelled {
-  background: linear-gradient(180deg, #FFF6F8 0%, #FDE6E6 100%);
-  color: #7A1F1F;
-  box-shadow: 0 12px 28px rgba(196,30,58,0.04);
-}
-.appointment-card.card-completed,
-.appointment-card.card-done {
-  background: linear-gradient(180deg, #CFF8D6 0%, #8EDB8C 100%);
-  color: #0E8A32;
-  box-shadow: 0 12px 28px rgba(14,138,50,0.06);
-}
-.appointment-card.card-rescheduled {
-  background: #FFFBEB;
-  color: #7A4A12;
-  box-shadow: 0 12px 28px rgba(186,134,0,0.04);
-}
-
-.status-text.status-ongoing {
-  color: #D9730D;
+  text-align: right;
 }
 
 .cancel-btn {
@@ -394,20 +383,60 @@
   text-align: right;
 }
 
-.details-status.status-pending {
-  color: #60A5FA;
+.modal-header {
+  margin-bottom: 1.25rem;
 }
 
-.details-status.status-cancelled {
-  color: #A33131;
+.modal-header h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.45rem;
 }
 
-.details-status.status-approved {
-  color: #2FC26A;
+.modal-subtitle {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 13px;
 }
 
-.details-status.status-ongoing {
-  color: #D9730D;
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.modal-select,
+.modal-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  outline: none;
+  font-size: 14px;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modal-select:focus,
+.modal-textarea:focus {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+}
+
+.modal-textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 1.5rem;
 }
 
 .details-section {
@@ -504,10 +533,11 @@
 }
 
 .history-section {
-  background: var(--card-bg);
-  box-shadow: var(--shadow-card);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem 2rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.08);
+  border-radius: 24px;
+  padding: 1.75rem 2rem;
   margin-bottom: 2rem;
 }
 

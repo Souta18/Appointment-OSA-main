@@ -4,7 +4,13 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-}\n\n.auth-form form {\n  display: flex;\n  flex-direction: column;\n  gap: 0;\n}
+}
+
+.auth-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
 
 .auth-title {
   font-family: var(--font-montserrat);
@@ -178,8 +184,10 @@
 /* Back button container used on auth pages (Sign in / Sign up) */
 .auth-back {
   margin-bottom: 0.75rem;
-  display: flex;
+  display: flex !important;
   justify-content: flex-start;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .auth-back .btn {
@@ -193,6 +201,8 @@
 /* bottom placement for student forms */
 .auth-bottom {
   margin-top: 0.75rem;
-  display: flex;
+  display: flex !important;
   justify-content: center;
+  visibility: visible !important;
+  opacity: 1 !important;
 }

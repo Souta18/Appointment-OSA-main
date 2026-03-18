@@ -2,16 +2,32 @@ import { useState, useEffect } from 'react'
 import NavBar from '../components/NavBar'
 import { Bar, Pie } from 'react-chartjs-2'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend } from 'chart.js'
+import { 
+  Calendar, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Hourglass, 
+  ChevronLeft, 
+  ChevronRight, 
+  HelpCircle, 
+  Plus, 
+  Search, 
+  FileDown, 
+  FileText,
+  User,
+  UserPlus,
+  MoreVertical
+} from 'lucide-react'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
-import Sidebar from '../components/Sidebar'
 import AdminWalkIn from './AdminWalkIn'
 import WalkInModal from '../components/WalkInModal'
 import ModalNoOverlay from '../components/ModalNoOverlay'
 import { useLocation } from 'react-router-dom'
 import NewUserModal from '../components/NewUserModal'
 import './AdminDashboard.css'
-import { listAppointments, updateAppointmentStatus, createAppointment as apiCreateAppointment, listAvailability, addAvailability, deleteAvailability, updateAvailability } from '../api'
+import { listAppointments, updateAppointmentStatus, requestReschedule, createAppointment as apiCreateAppointment, listAvailability, addAvailability, deleteAvailability, updateAvailability } from '../api'
 import Toast from '../components/Toast'
 
 export default function AdminDashboard() {
@@ -23,6 +39,7 @@ export default function AdminDashboard() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [isApproving, setIsApproving] = useState(false)
+  const [isDeclining, setIsDeclining] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [rescheduleData, setRescheduleData] = useState({ date: '', start: '', end: '', reason: '' })
@@ -31,8 +48,10 @@ export default function AdminDashboard() {
   const [rescheduleCanSend, setRescheduleCanSend] = useState(false)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [declineReason, setDeclineReason] = useState('')
-  const [declineReasonType, setDeclineReasonType] = useState('')
+  const [declineReasonType, setDeclineReasonType] = useState('other')
+  const [declineError, setDeclineError] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
+
   const [confirmMessage, setConfirmMessage] = useState('')
   const [confirmType, setConfirmType] = useState('success')
   const [showAllModal, setShowAllModal] = useState(false)
@@ -53,6 +72,7 @@ export default function AdminDashboard() {
   const [newType, setNewType] = useState('')
   const [editingAvailId, setEditingAvailId] = useState(null)
   const [editingAvailIdx, setEditingAvailIdx] = useState(null)
+  const [scheduleErrors, setScheduleErrors] = useState({})
   const [scheduleWarning, setScheduleWarning] = useState(false)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const [datedInputs, setDatedInputs] = useState({})
@@ -66,6 +86,36 @@ export default function AdminDashboard() {
   const [chartRange, setChartRange] = useState('weekly')
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December']
+
+  useEffect(() => {
+    if (!declineError) return
+    const id = setTimeout(() => setDeclineError(''), 2000)
+    return () => clearTimeout(id)
+  }, [declineError])
+
+  useEffect(() => {
+    if (Object.keys(scheduleErrors).length === 0) return
+    const id = setTimeout(() => setScheduleErrors({}), 2000)
+    return () => clearTimeout(id)
+  }, [scheduleErrors])
+
+  useEffect(() => {
+    if (Object.keys(datedErrors).length === 0) return
+    const id = setTimeout(() => setDatedErrors({}), 2000)
+    return () => clearTimeout(id)
+  }, [datedErrors])
+
+  useEffect(() => {
+    if (rescheduleErrors.length === 0) return
+    const id = setTimeout(() => setRescheduleErrors([]), 2000)
+    return () => clearTimeout(id)
+  }, [rescheduleErrors])
+
+  useEffect(() => {
+    if (!showConfirm) return
+    const id = setTimeout(() => setShowConfirm(false), 5000)
+    return () => clearTimeout(id)
+  }, [showConfirm])
 
   // Helper to parse YYYY-MM-DD into local Date and format
   const isoToLocalDateString = (iso, opts) => {
@@ -107,31 +157,34 @@ export default function AdminDashboard() {
   const refreshAppointments = async () => {
     try {
       const res = await listAppointments()
-      // If API reachable, treat server data as authoritative (even if empty)
       if (res && res.ok && Array.isArray(res.data)) {
         const serverApts = res.data || []
         try { localStorage.setItem('appointments', JSON.stringify(serverApts)) } catch (e) {}
-        // annotate server appointments with admin name when available
         try {
           const rawAdmin = typeof window !== 'undefined' && localStorage.getItem('adminUser')
           const adminName = rawAdmin ? (JSON.parse(rawAdmin||'{}').name || JSON.parse(rawAdmin||'{}').fullName || JSON.parse(rawAdmin||'{}').full_name || JSON.parse(rawAdmin||'{}').username) : null
-          const annotated = (serverApts || []).map(a => (a && (a.cancelled_by === 'admin' || (String(a.cancelled_by||'').toLowerCase()==='admin')) && adminName) ? { ...a, cancelled_by_name: adminName } : a)
+          const annotated = (serverApts || []).map(a => {
+            const cancelledByVal = a && (a.cancelled_by || a.cancelledBy)
+            const isAdminCancelled = cancelledByVal && String(cancelledByVal).toLowerCase() === 'admin'
+            return (a && isAdminCancelled && adminName) ? { ...a, cancelled_by_name: adminName } : a
+          })
           setAppointments(annotated)
         } catch (e) {
           setAppointments(serverApts)
         }
       } else {
-        // Fallback: read appointments from localStorage (used by Walk-In page when backend is unavailable)
         try {
           const raw = localStorage.getItem('appointments')
           const arr = raw ? JSON.parse(raw) : []
-          // if admin user is logged in locally, backfill cancelled_by_name for admin-cancelled items
           try {
             const rawAdmin = typeof window !== 'undefined' && localStorage.getItem('adminUser')
             const adminName = rawAdmin ? (JSON.parse(rawAdmin||'{}').name || JSON.parse(rawAdmin||'{}').fullName || JSON.parse(rawAdmin||'{}').full_name || JSON.parse(rawAdmin||'{}').username) : null
-            const annotated = (arr || []).map(a => (a && (a.cancelled_by === 'admin' || (String(a.cancelled_by||'').toLowerCase()==='admin')) && adminName) ? { ...a, cancelled_by_name: adminName } : a)
+            const annotated = (arr || []).map(a => {
+              const cancelledByVal = a && (a.cancelled_by || a.cancelledBy)
+              const isAdminCancelled = cancelledByVal && String(cancelledByVal).toLowerCase() === 'admin'
+              return (a && isAdminCancelled && adminName) ? { ...a, cancelled_by_name: adminName } : a
+            })
             setAppointments(Array.isArray(annotated) ? annotated : [])
-            try { localStorage.setItem('appointments', JSON.stringify(annotated)) } catch (e) {}
           } catch (e) {
             setAppointments(Array.isArray(arr) ? arr : [])
           }
@@ -155,15 +208,14 @@ export default function AdminDashboard() {
     return () => clearInterval(id)
   }, [])
 
-useEffect(() => {
-  (async () => {
-    const resp = await listAvailability()
-    const avail = resp && resp.data ? resp.data : (resp || {})
-    setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
-  })()
-}, [])
+  useEffect(() => {
+    (async () => {
+      const resp = await listAvailability()
+      const avail = resp && resp.data ? resp.data : (resp || {})
+      setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
+    })()
+  }, [])
 
-  // enable Send button only when basic client-side validation passes
   useEffect(() => {
     const toMins = (t) => {
       if (!t) return null
@@ -181,10 +233,8 @@ useEffect(() => {
       const e = toMins(end)
       if (s === null || e === null) return setRescheduleCanSend(false)
       if (s >= e) return setRescheduleCanSend(false)
-      // not in past (allow small leeway)
       const proposed = new Date(`${date}T${String(start).padStart(5,'0')}`)
       if (proposed.getTime() < Date.now() - 60000) return setRescheduleCanSend(false)
-      // availability slot fit
       const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
       const wd = weekDays[new Date(date).getDay()]
       const ranges = (availability && availability[wd]) ? availability[wd] : []
@@ -203,12 +253,10 @@ useEffect(() => {
     }
   }, [rescheduleData, availability])
 
-  // flatten dated availability entries for rendering
   const datedRows = Object.entries(availability).flatMap(([day, arr]) => {
     return (arr || []).filter(r => r && r.date).map(r => ({ day, ...r }))
   })
 
-  // helper: parse appointment date+time into a Date
   const parseAppointmentStart = (a) => {
     try {
       const datePart = a.iso || (a.date ? a.date : '')
@@ -229,40 +277,53 @@ useEffect(() => {
     } catch (e) { return null }
   }
 
-    // helper: convert time like "9:30 AM" to minutes since midnight, or null
-    const toMinutes = (t) => {
-      if (!t) return null
-      const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
-      if (!m) return null
-      let hh = Number(m[1])
-      const mm = Number(m[2])
-      const ampm = m[3].toUpperCase()
-      if (ampm === 'PM' && hh !== 12) hh += 12
-      if (ampm === 'AM' && hh === 12) hh = 0
-      return hh * 60 + mm
-    }
+  const toMinutes = (t) => {
+    if (!t) return null
+    const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+    if (!m) return null
+    let hh = Number(m[1])
+    const mm = Number(m[2])
+    const ampm = m[3].toUpperCase()
+    if (ampm === 'PM' && hh !== 12) hh += 12
+    if (ampm === 'AM' && hh === 12) hh = 0
+    return hh * 60 + mm
+  }
 
-    // helper: return true when appointment is currently ongoing (same date and now between start and end)
-    const isAppointmentOngoing = (apt) => {
-      try {
-        if (!apt) return false
-        const iso = apt.iso || (apt.date ? apt.date : '')
-        if (!iso) return false
-        const now = new Date()
-        const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-        if (iso !== todayIso) return false
-        const startMin = toMinutes(apt.start || apt.time || '')
-        const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
-        if (startMin === null || endMin === null) return false
-        const nowMin = now.getHours() * 60 + now.getMinutes()
-        return nowMin >= startMin && nowMin < endMin
-      } catch (e) { return false }
-    }
+  const isAppointmentOngoing = (apt) => {
+    try {
+      if (!apt) return false
+      const iso = apt.iso || (apt.date ? apt.date : '')
+      if (!iso) return false
+      const now = new Date()
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+      if (iso !== todayIso) return false
+      const startMin = toMinutes(apt.start || apt.time || '')
+      const endMin = toMinutes(apt.end || '') || (startMin !== null ? startMin + 30 : null)
+      if (startMin === null || endMin === null) return false
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      return nowMin >= startMin && nowMin < endMin
+    } catch (e) { return false }
+  }
 
-  // push notification record and queue a placeholder email in `outbox`
-  const sendNotification = (email, title, message) => {}
+  const getAppointmentStatusKey = (apt) => {
+    if (!apt) return ''
+    const status = String(apt.status || '').toLowerCase()
+    // If a reschedule was requested, treat it as "rescheduled" visually
+    if (apt.rescheduleRequested || status === 'rescheduled') return 'rescheduled'
+    // Some appointments might be marked cancelled but still contain a reschedule request
+    if (status === 'cancelled' && apt.rescheduleRequested) return 'rescheduled'
+    return status
+  }
 
-  const applyBan = (email, hours = 24) => {}
+  const getAppointmentStatusLabel = (apt) => {
+    const key = getAppointmentStatusKey(apt)
+    if (key === 'pending') return 'Pending for approval'
+    if (key === 'approved') return isAppointmentOngoing(apt) ? 'Ongoing' : 'Approved'
+    if (key === 'rescheduled') return 'Rescheduled'
+    if (key === 'done' || key === 'completed') return 'Completed'
+    if (key === 'cancelled' || key === 'declined') return 'Cancelled'
+    return (apt?.status || '').toString()
+  }
 
   const handleCreateUser = (user) => {
     try {
@@ -270,93 +331,9 @@ useEffect(() => {
       const arr = raw ? JSON.parse(raw) : []
       arr.push(user)
       localStorage.setItem('users', JSON.stringify(arr))
-      console.log('Created user', user)
-    } catch (e) { console.error(e) }
+    } catch (e) {}
     setShowCreateUser(false)
   }
-
-  // helper: display who cancelled the appointment (try localStorage for actual names)
-  const getCancelledByDisplay = (apt) => {
-    try {
-      if (!apt) return 'Unknown'
-      // check local overrides (set when admin cancels while offline or to persist client-side)
-      try {
-        const rawOverrides = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
-        const overrides = rawOverrides ? JSON.parse(rawOverrides) : {}
-        if (overrides && apt.id && overrides[String(apt.id)]) {
-          const o = overrides[String(apt.id)]
-          return o.name || (o.by ? (o.by === 'admin' ? 'Admin' : (o.by === 'student' ? 'Student' : (o.by === 'guest' ? 'Guest' : 'Unknown'))) : 'Unknown')
-        }
-      } catch (e) {}
-      // quick checks for explicit name fields on the appointment
-      const explicitName = apt.cancelledByName || apt.cancelled_by_name || apt.cancelled_by_display || apt.cancelledBy || apt.cancelled_by_fullname || apt.cancelledByFullName || apt.adminName || apt.admin_name || apt.cancelledByAdmin
-      if (explicitName) return String(explicitName)
-
-      const key = String(apt.cancelled_by || apt.cancelledBy || '').toLowerCase()
-      const note = String(apt.adminNote || apt.admin_note || '')
-
-      // If appointment object embeds an admin object
-      if (apt.admin && typeof apt.admin === 'object') {
-        const a = apt.admin
-        return a.name || a.fullName || a.full_name || a.username || 'Admin'
-      }
-
-      // student/guest names are often in apt.name
-      if (key === 'student') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('studentName')) || 'Student'
-      if (key === 'guest') return apt.name || (typeof window !== 'undefined' && localStorage.getItem('guestName')) || 'Guest'
-
-      // try to extract name from adminNote text using common phrases
-      const re1 = /cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
-      const m1 = note.match(re1)
-      if (m1 && m1[1]) {
-        const extracted = m1[1].split(/[.\n]/)[0].trim()
-        if (/system/i.test(extracted)) return 'Admin'
-        return extracted
-      }
-      const re2 = /was cancelled by[:\s]*([A-Za-z0-9 .,\-'_()]+)/i
-      const m2 = note.match(re2)
-      if (m2 && m2[1]) {
-        const extracted = m2[1].split(/[.\n]/)[0].trim()
-        if (/system/i.test(extracted)) return 'Admin'
-        return extracted
-      }
-
-      if (key === 'admin') {
-        try {
-          const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser')
-          if (raw) {
-            const u = JSON.parse(raw || '{}')
-            return u.name || u.fullName || u.full_name || u.username || 'Admin'
-          }
-        } catch (e) {}
-        return 'Admin'
-      }
-
-      // Treat system cancellations as admin for display purposes
-      if (key === 'system') return 'Admin'
-
-      // fallback: if text hints at role
-      if (/student/i.test(note)) return apt.name || 'Student'
-      if (/guest/i.test(note)) return apt.name || 'Guest'
-      if (/admin/i.test(note)) return (typeof window !== 'undefined' && (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username } } catch(e){} })()) || 'Admin'
-
-      // final simple inference: if appointment has studentId treat as Student, if guest flag treat as Guest
-      if (['cancelled','canceled'].includes(String(apt.status || '').toLowerCase())) {
-        if (apt.studentId || apt.studentId === 0) return 'Student'
-        if (apt.guest) return 'Guest'
-        try { const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser'); if (raw) return 'Admin' } catch (e) {}
-      }
-
-      return 'Unknown'
-    } catch (e) { return 'Unknown' }
-  }
-
-  // listen for global event dispatched by NavBar when admin clicks "Create User"
-  useEffect(() => {
-    const onOpen = () => setShowCreateUser(true)
-    window.addEventListener('admin:create-user', onOpen)
-    return () => window.removeEventListener('admin:create-user', onOpen)
-  }, [])
 
   const handleWalkInSubmit = async (payload) => {
     const now = new Date()
@@ -375,18 +352,6 @@ useEffect(() => {
     refreshAppointments()
   }
 
-  useEffect(() => {}, [])
-
-  // compute overview counts
-  const now = new Date()
-  const dayIndex = now.getDay() // 0 Sun .. 6 Sat
-  const mondayOffset = (dayIndex + 6) % 7 // convert to Monday=0
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset)
-  weekStart.setHours(0,0,0,0)
-  const weekEnd = new Date(weekStart)
-  weekEnd.setDate(weekStart.getDate() + 6)
-  weekEnd.setHours(23,59,59,999)
-
   const weeklyCount = appointments.filter(a => {
     const ts = Number(a.id) || a.submittedAt || 0;
     const apt = new Date(ts);
@@ -401,7 +366,6 @@ useEffect(() => {
   const doneCount = appointments.filter(a => (a.status || '').toLowerCase() === 'completed' || (a.status || '').toLowerCase() === 'done').length
   const cancelledCount = appointments.filter(a => (String(a.status || '').toLowerCase() === 'cancelled') || (String(a.status || '').toLowerCase() === 'declined')).length
 
-  // Helpers to format time values
   const formatFromInput = (hhmm) => {
     if (!hhmm) return ''
     const [hh, mm] = hhmm.split(':').map(Number)
@@ -412,9 +376,7 @@ useEffect(() => {
 
   const toInputValue = (display) => {
     if (!display) return ''
-    // if already in HH:MM (24) format
     if (/^\d{2}:\d{2}$/.test(display)) return display
-    // try parse like '09:00 AM'
     const m = display.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
     if (!m) return ''
     let hh = parseInt(m[1],10)
@@ -426,13 +388,48 @@ useEffect(() => {
   }
 
   const addRange = async () => {
-    if (!newStart || !newEnd || !scheduleDay) return
+    const errs = {}
+    if (!newStart) errs.start = 'Start time is required'
+    if (!newEnd) errs.end = 'End time is required'
+    if (!scheduleDay) errs.general = 'Day is required'
+
+    const parseHM = (s) => {
+      try {
+        const [hh, mm] = (s || '').split(':').map(Number)
+        if (Number.isInteger(hh) && Number.isInteger(mm)) return hh * 60 + mm
+      } catch (e) {}
+      return null
+    }
+
+    const startMin = parseHM(newStart)
+    const endMin = parseHM(newEnd)
+
+    if (startMin === null && !errs.start) errs.start = 'Invalid start time'
+    if (endMin === null && !errs.end) errs.end = 'Invalid end time'
+    if (startMin !== null && endMin !== null && startMin >= endMin) errs.general = 'Start time must be before end time'
+
+    // Check overlaps for recurring slots (no date)
+    if (startMin !== null && endMin !== null && !newDate) {
+      const dayRanges = availability[scheduleDay] || []
+      const hasOverlap = dayRanges.some((r, idx) => {
+        if (r.date) return false // skip dated slots
+        if (editingAvailId && r.id === editingAvailId) return false
+        if (editingAvailIdx !== null && idx === editingAvailIdx) return false
+        const rs = parseHM(r.start)
+        const re = parseHM(r.end)
+        return (startMin < re && endMin > rs)
+      })
+      if (hasOverlap) errs.general = 'This schedule overlaps with an existing slot'
+    }
+
+    setScheduleErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
     const start = toInputValue(formatFromInput(newStart)) || newStart
     const end = toInputValue(formatFromInput(newEnd)) || newEnd
     if (editingAvailId) {
       await updateAvailability(editingAvailId, scheduleDay, start, end, newDate)
     } else if (editingAvailIdx !== null) {
-      // Update local availability array when no remote id is present
       const copy = { ...availability }
       const arr = (copy[scheduleDay] || []).slice()
       const item = arr[editingAvailIdx]
@@ -442,7 +439,6 @@ useEffect(() => {
         setAvailability(copy)
       }
     } else {
-      // if adding would exceed 5 anonymous ranges, show brief warning and abort
       const anonCount = ((availability[scheduleDay] || []).filter(r => !r.date || r.date === '').length)
       if (anonCount >= 5) {
         setScheduleWarning(true)
@@ -452,7 +448,6 @@ useEffect(() => {
       await addAvailability(scheduleDay, start, end, newDate)
     }
     const data = await listAvailability()
-    // handle both api helper shapes: { ok, data } or raw object
     const avail = data && data.data ? data.data : (data || {})
     setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
     setNewStart('')
@@ -460,17 +455,14 @@ useEffect(() => {
     setNewDate('')
     setEditingAvailId(null)
     setEditingAvailIdx(null)
+    setScheduleErrors({})
   }
 
-  // Save a dated availability slot (date + type). We'll store it under the weekday of the chosen date.
   const saveDatedSlot = async () => {
-    // client-side validation
     const errs = {}
     if (!newDatedDate) errs.date = 'Date is required'
-    // start/end expected in HH:MM (24h)
     if (!newDatedStart) errs.start = 'Start time is required'
     if (!newDatedEnd) errs.end = 'End time is required'
-    // Validate start < end
     const parseHM = (s) => {
       try {
         const [hh, mm] = (s || '').split(':').map(Number)
@@ -483,32 +475,33 @@ useEffect(() => {
     if (startMin === null && !errs.start) errs.start = 'Invalid start time'
     if (endMin === null && !errs.end) errs.end = 'Invalid end time'
     if (startMin !== null && endMin !== null && startMin >= endMin) errs.general = 'Start time must be before end time'
-    // Do not allow dated availability in the past
-    try {
-      const today = new Date()
-      today.setHours(0,0,0,0)
+
+    // Check overlaps for special slots on the same date
+    if (startMin !== null && endMin !== null && newDatedDate) {
       const d = new Date(newDatedDate)
-      d.setHours(0,0,0,0)
-      if (!errs.date && d < today) errs.date = 'Date cannot be in the past'
-    } catch (e) {}
+      const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]
+      const dayRanges = availability[dayName] || []
+      const hasOverlap = dayRanges.some(r => {
+        if (!r.date || r.date.slice(0, 10) !== newDatedDate) return false
+        if (editingAvailId && r.id === editingAvailId) return false
+        const rs = parseHM(r.start)
+        const re = parseHM(r.end)
+        return (startMin < re && endMin > rs)
+      })
+      if (hasOverlap) errs.general = 'This slot overlaps with an existing special slot'
+    }
 
     setDatedErrors(errs)
     if (Object.keys(errs).length > 0) return
     try {
       const d = new Date(newDatedDate)
-      if (isNaN(d)) return
       const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]
-      const start = newDatedStart || ''
-      const end = newDatedEnd || ''
       if (editingAvailId) {
-        // update existing dated availability
-        await updateAvailability(editingAvailId, dayName, start, end, newDatedDate)
+        await updateAvailability(editingAvailId, dayName, newDatedStart, newDatedEnd, newDatedDate)
       } else {
-        await addAvailability(dayName, start, end, newDatedDate)
+        await addAvailability(dayName, newDatedStart, newDatedEnd, newDatedDate)
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
     const data = await listAvailability()
     const avail = data && data.data ? data.data : (data || {})
     setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
@@ -533,75 +526,13 @@ useEffect(() => {
   const removeRange = async (day, idx) => {
     const item = (availability[day] || [])[idx]
     if (!item) return
-
-    // helper to parse HH:MM (24h) into a Date on the given ISO date
-    const parseIsoTime = (isoDate, hhmm) => {
-      try {
-        const [hh, mm] = (hhmm || '').split(':').map(Number)
-        const d = new Date(isoDate)
-        if (!isNaN(hh)) d.setHours(hh, isNaN(mm) ? 0 : mm, 0, 0)
-        return d
-      } catch (e) { return null }
-    }
-
-    // If this availability has a remote id, check for overlapping appointments
     if (item && item.id) {
-      // fetch latest appointments
-      const resp = await listAppointments()
-      const rows = resp && resp.data ? resp.data : (resp || [])
-
-      // if this availability has a specific date (dated slot), check by that date
-      const isoDate = item.date || item.iso || ''
-      let overlapping = []
-      if (isoDate) {
-        const rangeStart = parseIsoTime(isoDate, item.start)
-        const rangeEnd = parseIsoTime(isoDate, item.end)
-        for (const a of (rows || [])) {
-          const aptStart = parseAppointmentStart(a)
-          if (!aptStart) continue
-          // compare only when appointment date matches this availability date
-          const aptIso = (a.iso || (a.date ? a.date : ''))
-          if (!aptIso || aptIso !== localIso(isoDate)) continue
-          if (rangeStart && rangeEnd) {
-            if (aptStart >= rangeStart && aptStart < rangeEnd) overlapping.push(a)
-          } else {
-            // fallback: match by start time string if available
-            const aptTime = a.start || a.time || ''
-            if (aptTime && item.start && aptTime.includes(item.start.slice(0,2))) overlapping.push(a)
-          }
-        }
-      }
-
-      if (overlapping.length > 0) {
-        const proceed = window.confirm(`There are ${overlapping.length} appointment(s) scheduled in this slot. Cancel them and remove the slot?`)
-        if (!proceed) return
-
-            // cancel overlapping appointments first
-        for (const a of overlapping) {
-          try {
-            await updateAppointmentStatus(a.id, 'cancelled', {}, true)
-            // optimistic local update so UI reflects admin cancel including admin name when available
-            const adminName = (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || null } } catch(e){} return null })()
-            setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'cancelled', cancelled_by: 'admin', cancelled_by_name: adminName } : x))
-            try {
-              const raw = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
-              const overrides = raw ? JSON.parse(raw) : {}
-              overrides[String(a.id)] = { by: 'admin', name: adminName || 'Admin' }
-              localStorage.setItem('cancelledByOverrides', JSON.stringify(overrides))
-            } catch (e) {}
-          } catch (e) { /* ignore per-appointment errors and continue */ }
-        }
-      }
-
-      // proceed to delete availability
       await deleteAvailability(item.id)
       const data = await listAvailability()
       const avail = data && data.data ? data.data : (data || {})
       setAvailability(avail || { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] })
       return
     }
-
-    // If item has no remote id, remove it locally from availability array
     const copy = { ...availability }
     const arr = (copy[day] || []).slice()
     arr.splice(idx, 1)
@@ -609,33 +540,18 @@ useEffect(() => {
     setAvailability(copy)
   }
 
-  // --- Analytics helpers ---
-  const getDepartments = () => {
-    const deps = new Set()
-    appointments.forEach(a => { if (a.course) deps.add(a.course); if (a.department) deps.add(a.department) })
-    return ['All', ...Array.from(deps)]
-  }
-
   const filteredAppointments = () => {
     return appointments.filter(a => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
-        if (!((a.name || '').toLowerCase().includes(q) || (a.reason || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q))) return false
+        if (!((a.name || '').toLowerCase().includes(q) || (a.reason || '').toLowerCase().includes(q))) return false
       }
       if (filterDept && filterDept !== 'All') {
         const deptVal = a.department || a.course || ''
-        if (!deptVal || !deptVal.includes(filterDept)) return false
+        if (!deptVal.includes(filterDept)) return false
       }
       if (filterStatus && filterStatus !== 'All') {
         if ((a.status || '').toLowerCase() !== filterStatus.toLowerCase()) return false
-      }
-      if (fromDateFilter) {
-        const iso = a.iso || (a.date ? a.date : '')
-        if (!iso || iso < fromDateFilter) return false
-      }
-      if (toDateFilter) {
-        const iso = a.iso || (a.date ? a.date : '')
-        if (!iso || iso > toDateFilter) return false
       }
       return true
     })
@@ -645,10 +561,7 @@ useEffect(() => {
     const cols = ['Date','Time','Name','Department','Reason','Status']
     const lines = [cols.join(',')]
     rows.forEach(r => {
-      const date = r.date || r.iso || ''
-      const time = r.start || r.time || ''
-      const dept = r.department || r.course || ''
-      const line = [date, time, (r.name||''), dept, (r.reason||''), (r.status||'')].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')
+      const line = [r.date || r.iso || '', r.start || r.time || '', r.name||'', r.department || r.course || '', r.reason||'', r.status||''].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')
       lines.push(line)
     })
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
@@ -657,343 +570,426 @@ useEffect(() => {
     a.href = url
     a.download = 'appointments.csv'
     a.click()
-    URL.revokeObjectURL(url)
   }
 
   const exportPDF = (rows) => {
-    // Simple printable window — user can Save as PDF from print dialog
     const w = window.open('', '_blank')
-    const html = `
-      <html><head><title>Appointments</title></head><body>
-      <h2>Appointments</h2>
-      <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
-      <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Department</th><th>Reason</th><th>Status</th></tr></thead>
-      <tbody>
-      ${rows.map(r => `<tr><td>${r.date||r.iso||''}</td><td>${r.start||r.time||''}</td><td>${r.name||''}</td><td>${r.department||r.course||''}</td><td>${r.reason||''}</td><td>${r.status||''}</td></tr>`).join('')}
-      </tbody></table>
-      </body></html>`
+    const html = `<html><body><h2>Appointments</h2><table border="1" style="border-collapse:collapse;width:100%"><thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.date||r.iso||''}</td><td>${r.start||r.time||''}</td><td>${r.name||''}</td><td>${r.status||''}</td></tr>`).join('')}</tbody></table></body></html>`
     w.document.write(html)
     w.document.close()
     w.print()
   }
 
-  const computeBarData = () => {
-    // Monday..Friday counts for the current week (Mon-Fri)
-    const now = new Date()
-    const dayIndex = now.getDay() // 0 Sun..6 Sat
-    const mondayOffset = (dayIndex + 6) % 7
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset)
-    weekStart.setHours(0,0,0,0)
-    const labels = ['Mon','Tue','Wed','Thu','Fri']
-    const counts = [0,0,0,0,0]
-    appointments.forEach(a => {
-      const iso = a.iso || (a.date ? a.date : '')
-      if (!iso) return
-      // parse YYYY-MM-DD as local date to avoid timezone shift
-      const parts = String(iso).split('-')
-      const d = (parts.length >= 3) ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(iso)
-      const diff = Math.floor((d - weekStart) / (24*3600*1000))
-      if (diff >=0 && diff < 5) counts[diff]++
-    })
-    return { labels, counts }
-  }
-
-  const computeStatusPie = () => {
-    const map = {}
-    appointments.forEach(a => {
-      const s = (a.status || 'unknown')
-      map[s] = (map[s] || 0) + 1
-    })
-    return map
-  }
-
-  // when analytics active, make content fullwidth
-  const contentClass = `admin-content ${activeItem === 'availability' ? 'availability-fullwidth' : ''} ${activeItem === 'analytics' ? 'analytics-fullwidth' : ''}`
-
-  const computeMonthlyData = () => {
-    // counts per month for current year
-    const labels = monthNames.map(m => m.slice(0,3))
-    const counts = Array(12).fill(0)
-    appointments.forEach(a => {
-      const iso = a.iso || (a.date ? a.date : '')
-      if (!iso) return
-      const parts = String(iso).split('-')
-      const d = (parts.length >= 3) ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(iso)
-      if (isNaN(d)) return
-      counts[d.getMonth()]++
-    })
-    return { labels, counts }
+  const getDepartments = () => {
+    const depts = [...new Set(appointments.map(a => a.department || a.course).filter(Boolean))]
+    return ['All', ...depts]
   }
 
   const barChartData = () => {
-    const src = chartRange === 'monthly' ? computeMonthlyData() : computeBarData()
-    return {
-      labels: src.labels,
-      datasets: [{ label: 'Bookings', data: src.counts, backgroundColor: src.counts.map((_,i)=> ['#f56565','#f6ad55','#f6e05e','#68d391','#63b3ed','#a78bfa','#cbd5e1','#94a3b8','#d6bcf0','#a97c66','#f687b3','#f6c27a'][i%12]) }]
+    const filtered = appointments.filter(a => {
+      if (filterDept !== 'All') {
+        const deptVal = a.department || a.course || ''
+        if (!deptVal.includes(filterDept)) return false
+      }
+      return true
+    })
+
+    const days = chartRange === 'monthly' 
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+    
+    const counts = chartRange === 'monthly' ? Array(12).fill(0) : Array(5).fill(0)
+    
+    filtered.forEach(a => {
+      const dt = parseAppointmentStart(a)
+      if (dt) {
+        if (chartRange === 'monthly') {
+          counts[dt.getMonth()]++
+        } else {
+          const dayIdx = dt.getDay() - 1 // 0=Mon, 4=Fri
+          if (dayIdx >= 0 && dayIdx <= 4) counts[dayIdx]++
+        }
+      }
+    })
+
+    return { 
+      labels: days, 
+      datasets: [{ 
+        label: 'Bookings', 
+        data: counts, 
+        backgroundColor: '#3b82f6',
+        borderRadius: 8,
+        hoverBackgroundColor: '#2563eb'
+      }] 
     }
   }
 
   const pieChartData = () => {
-    const map = computeStatusPie()
-    return {
-      labels: Object.keys(map).map(k => k === 'confirmed' ? 'rescheduled' : k),
-      datasets: [{ data: Object.values(map), backgroundColor: ['#2b6cb0','#48bb78','#f6ad55','#f56565','#a0aec0'] }]
+    const filtered = appointments.filter(a => {
+      if (filterDept !== 'All') {
+        const deptVal = a.department || a.course || ''
+        if (!deptVal.includes(filterDept)) return false
+      }
+      return true
+    })
+
+    const p = filtered.filter(a => a.status === 'pending').length
+    const d = filtered.filter(a => (a.status || '').toLowerCase() === 'completed' || (a.status || '').toLowerCase() === 'done').length
+    const c = filtered.filter(a => (String(a.status || '').toLowerCase() === 'cancelled') || (String(a.status || '').toLowerCase() === 'declined')).length
+
+    return { 
+      labels: ['Pending', 'Completed', 'Cancelled'], 
+      datasets: [{ 
+        data: [p, d, c], 
+        backgroundColor: ['#fbbf24', '#3b82f6', '#ef4444'],
+        borderWidth: 0,
+        hoverOffset: 4
+      }] 
     }
   }
 
-  // Render action buttons for the details modal (keeps JSX here simpler)
-  const renderDetailsActions = () => {
-    if (!selectedAppointment) return null
-    const status = String(selectedAppointment.status || '').toLowerCase()
-
-    if (status === 'pending') {
-      return (
-        <>
-          <button className="decline-btn" onClick={() => { setDeclineReason(''); setShowDeclineModal(true) }}>Decline</button>
-          <button className="approve-btn" onClick={() => {
-            setIsApproving(true)
-            updateAppointmentStatus(selectedAppointment.id, 'approved', {}, true).then(() => {
-              try {
-                const raw = localStorage.getItem('notifications')
-                const arr = raw ? JSON.parse(raw) : []
-                arr.unshift({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment approved', message: `Your appointment on ${selectedAppointment.date || selectedAppointment.iso} at ${selectedAppointment.start || selectedAppointment.time} is approved.`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
-                localStorage.setItem('notifications', JSON.stringify(arr))
-              } catch (e) {}
-              setIsApproving(false)
-              setDetailsOpen(false)
-              setSelectedAppointment(null)
-              refreshAppointments()
-            })
-          }}>Approve</button>
-        </>
-      )
-    }
-
-    if (status === 'rescheduled') {
-      return (<><button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Back</button></>)
-    }
-
-    if (['declined','cancelled'].includes(status)) {
-      const cancelledByKey = String(selectedAppointment.cancelled_by || selectedAppointment.cancelledBy || selectedAppointment.adminNote || '').toLowerCase()
-      // Show reschedule when admin cancelled (or when declined). Treat 'system' as admin.
-      const allowReschedule = (status === 'declined') || cancelledByKey.includes('admin') || cancelledByKey.includes('system')
-      if (!allowReschedule) return null
-      return (
-        <>
-          <button className="reschedule-open-btn" onClick={() => { setRescheduleData({ date: '', start: '', end: '', reason: '' }); setRescheduleOpen(true) }}>Reschedule</button>
-          <button className="close-btn" onClick={() => { setDetailsOpen(false); setSelectedAppointment(null) }}>Close</button>
-        </>
-      )
-    }
-
-    if (isAppointmentOngoing(selectedAppointment) && !['done','completed'].includes((status || '').toLowerCase())) {
-      return (
-        <>
-          <button className="done-btn" onClick={async () => {
-            if (!selectedAppointment) return
-            setIsCompleting(true)
-            const prevAppointment = { ...selectedAppointment }
-            const optimisticallyDone = { ...selectedAppointment, status: 'completed' }
-            setSelectedAppointment(optimisticallyDone)
-            setAppointments(prev => prev.map(a => a.id === optimisticallyDone.id ? optimisticallyDone : a))
-            try {
-              const raw = localStorage.getItem('notifications')
-              const arr = raw ? JSON.parse(raw) : []
-              arr.unshift({ id: Date.now(), appointmentId: optimisticallyDone.id, title: 'Appointment completed', message: `Your appointment on ${optimisticallyDone.date || optimisticallyDone.iso} at ${optimisticallyDone.start || optimisticallyDone.time} was marked done.`, createdAt: Date.now(), read: false, email: optimisticallyDone.email || optimisticallyDone.studentEmail, studentId: optimisticallyDone.studentId, target: 'student' })
-              localStorage.setItem('notifications', JSON.stringify(arr))
-            } catch (e) {}
-            setDetailsOpen(false)
-            setSelectedAppointment(null)
-            try {
-              await updateAppointmentStatus(optimisticallyDone.id, 'completed', {}, true)
-              refreshAppointments()
-            } catch (err) {
-              setAppointments(prev => prev.map(a => a.id === prevAppointment.id ? prevAppointment : a))
-              alert('Failed to mark appointment done. Please try again.')
-            } finally {
-              setIsCompleting(false)
-            }
-          }}>{isCompleting ? 'Completing...' : 'Done'}</button>
-
-          {/* Approve button removed per request; only Done remains */}
-        </>
-      )
-    }
-
-    return null
-  }
+  const contentClass = `admin-content ${activeItem === 'calendar' ? '' : 'full-width'}`
 
   return (
     <div className="admin-dashboard">
       <NavBar userType="admin" />
+      <Toast show={showConfirm} type={confirmType} message={confirmMessage} onClose={() => setShowConfirm(false)} />
       <main className="admin-main">
+        <div className="section-header">
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900">Admin Dashboard</h1>
+            <p className="section-subtitle">Manage appointments, availability, and view analytics</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="walk-in-btn" onClick={() => setShowWalkInModal(true)}>
+              <UserPlus size={20} />
+              <span>Walk-in</span>
+            </button>
+            <div className="flex bg-gray-100 p-1 rounded-xl">
+              <button className={`tab-btn-pill ${activeItem==='calendar' ? 'active' : ''}`} onClick={() => setActiveItem('calendar')}>Calendar</button>
+              <button className={`tab-btn-pill ${activeItem==='analytics' ? 'active' : ''}`} onClick={() => setActiveItem('analytics')}>Analytics</button>
+              <button className={`tab-btn-pill ${activeItem==='availability' ? 'active' : ''}`} onClick={() => setActiveItem('availability')}>Availability</button>
+            </div>
+          </div>
+        </div>
+        <div className="section-divider" />
+
         <div className="overview-panel">
-          <h2 className="overview-title">Appointment overview</h2>
-          <div className="admin-stats">
-          <div className="stat-card">
-            <div>
-              <div className="stat-label">This Week's Bookings</div>
-              <div className="stat-value">{weeklyCount}</div>
+          <div className="admin-stats grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="stat-card border-blue-500">
+              <div className="stat-info">
+                <div className="stat-label">This Week's Bookings</div>
+                <div className="stat-value">{weeklyCount}</div>
+              </div>
+              <div className="stat-icon bg-blue-100 text-blue-600">
+                <Calendar size={24} />
+              </div>
             </div>
-            <div className="stat-icon icon-calendar">📅</div>
-          </div>
-          <div className="stat-card">
-            <div>
-              <div className="stat-label">Pending 
-                For approval</div>
-              <div className="stat-value">{pendingCount}</div>
+            <div className="stat-card border-yellow-500">
+              <div className="stat-info">
+                <div className="stat-label">Pending For approval</div>
+                <div className="stat-value">{pendingCount}</div>
+              </div>
+              <div className="stat-icon bg-yellow-100 text-yellow-600">
+                <Hourglass size={24} />
+              </div>
             </div>
-            <div className="stat-icon icon-pending">⏳</div>
-          </div>
-          <div className="stat-card">
-            <div>
-              <div className="stat-label">Accomplished</div>
-              <div className="stat-value">{doneCount}</div>
+            <div className="stat-card border-green-500">
+              <div className="stat-info">
+                <div className="stat-label">Accomplished</div>
+                <div className="stat-value">{doneCount}</div>
+              </div>
+              <div className="stat-icon bg-green-100 text-green-600">
+                <CheckCircle size={24} />
+              </div>
             </div>
-            <div className="stat-icon icon-done">✅</div>
-          </div>
-          <div className="stat-card">
-            <div>
-              <div className="stat-label">Cancelled</div>
-              <div className="stat-value">{cancelledCount}</div>
+            <div className="stat-card border-red-500">
+              <div className="stat-info">
+                <div className="stat-label">Cancelled</div>
+                <div className="stat-value">{cancelledCount}</div>
+              </div>
+              <div className="stat-icon bg-red-100 text-red-600">
+                <XCircle size={24} />
+              </div>
             </div>
-            <div className="stat-icon icon-cancelled">❌</div>
-          </div>
           </div>
         </div>
 
-        <div className={contentClass}>
+        <div className="admin-content-fullwidth">
           {activeItem === 'calendar' && (
-          <div className="admin-calendar-section">
-            <div className="calendar-nav">
-              <button onClick={prevMonth}>←</button>
-              <span>{monthNames[selectedDate.getMonth()]} {selectedDate.getFullYear()}</span>
-              <button onClick={nextMonth}>→</button>
-            </div>
-            <div className="weekdays">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                <span key={d}>{d}</span>
-              ))}
-            </div>
-            <div className="calendar-grid">
-              {blanks.map((_, i) => <div key={`b${i}`} className="day blank" />)}
-              {days.map(d => {
-                const dateObj = new Date(year, month, d)
-                const iso = localIso(dateObj)
-                const apptsForDay = appointments.filter(a => a.iso === iso)
-                const statuses = [...new Set(apptsForDay.map(a => a.status))]
-                return (
-                  <div
-                    key={d}
-                    className={`day ${selectedDate.getDate() === d ? 'selected' : ''}`}
-                    onClick={() => setSelectedDate(dateObj)}
-                  >
-                    <div className="day-number">{d}</div>
-                    {apptsForDay.length > 0 && (
-                      <div className="day-indicators">
-                        {statuses.map(s => <span key={s} className={`dot dot-${s}`} />)}
-                      </div>
-                    )}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Left Side: Calendar (Smaller and centered) */}
+              <div className="lg:col-span-5 xl:col-span-4 flex justify-center lg:justify-start">
+                <div className="bg-white p-6 rounded-[28px] shadow-sm border border-gray-100 w-full max-w-[420px]">
+                  <div className="flex items-center justify-between mb-6">
+                    <button onClick={prevMonth} className="p-2 hover:bg-gray-50 rounded-xl transition-colors text-gray-400 hover:text-blue-600"><ChevronLeft size={20} /></button>
+                    <div className="text-lg font-extrabold text-gray-900">{monthNames[selectedDate.getMonth()]} {selectedDate.getFullYear()}</div>
+                    <button onClick={nextMonth} className="p-2 hover:bg-gray-50 rounded-xl transition-colors text-gray-400 hover:text-blue-600"><ChevronRight size={20} /></button>
                   </div>
-                )
-              })}
+                  <div className="grid grid-cols-7 mb-4">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                      <span key={d} className="text-center text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">{d}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {blanks.map((_, i) => <div key={`b${i}`} className="aspect-square" />)}
+                    {days.map(d => {
+                      const dateObj = new Date(year, month, d)
+                      const iso = localIso(dateObj)
+                      const apptsForDay = appointments.filter(a => a.iso === iso)
+                      const isSelected = selectedDate.getDate() === d && selectedDate.getMonth() === month && selectedDate.getFullYear() === year
+                      
+                      return (
+                        <div
+                          key={d}
+                          className={`aspect-square flex flex-col items-center justify-center rounded-xl cursor-pointer transition-all relative group ${
+                            isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'hover:bg-gray-50 text-gray-600'
+                          }`}
+                          onClick={() => setSelectedDate(dateObj)}
+                        >
+                          <span className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-gray-700'}`}>{d}</span>
+                          {apptsForDay.length > 0 && !isSelected && (
+                            <div className="absolute bottom-1.5 flex gap-0.5">
+                              {[...new Set(apptsForDay.map(a => getAppointmentStatusKey(a)))].slice(0, 3).map((s, idx) => (
+                                <div key={idx} className={`w-1 h-1 rounded-full ${
+                                  s === 'pending' || s === 'rescheduled' ? 'bg-yellow-400' : 
+                                  (s === 'done' || s === 'completed') ? 'bg-blue-400' : 
+                                  (s === 'cancelled' || s === 'declined') ? 'bg-red-400' : 'bg-green-400'
+                                }`} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side: Suggested - Daily Schedule & Quick Stats */}
+              <div className="lg:col-span-7 xl:col-span-8 space-y-8">
+                <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100">
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h3 className="text-2xl font-black text-gray-900">Schedule for Today</h3>
+                      <p className="text-gray-400 font-bold text-sm mt-1">{selectedDate.toDateString()}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button className="text-blue-600 font-black hover:underline px-4 py-2 bg-blue-50 rounded-xl text-sm" onClick={() => setShowAllModal(true)}>View All Records</button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {(() => {
+                      const visible = appointments.filter(a => a.iso === selectedIso)
+                      if (visible.length === 0) return (
+                        <div className="col-span-full py-16 text-center bg-gray-50 rounded-[28px] border-2 border-dashed border-gray-100">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="p-4 bg-white rounded-2xl shadow-sm text-gray-300">
+                              <Calendar size={32} />
+                            </div>
+                            <p className="text-gray-400 font-bold">No appointments for this day</p>
+                          </div>
+                        </div>
+                      )
+                      return visible.map(apt => (
+                        <div key={apt.id} className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden" onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true) }} style={{cursor:'pointer'}}>
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl">
+                              <Clock size={14} className="text-gray-400" />
+                              <span className="text-sm font-black text-gray-600">{apt.start || apt.time}</span>
+                            </div>
+                            <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                              getAppointmentStatusKey(apt) === 'pending' || getAppointmentStatusKey(apt) === 'rescheduled' ? 'bg-yellow-50 text-yellow-600' :
+                              (getAppointmentStatusKey(apt) === 'done' || getAppointmentStatusKey(apt) === 'completed') ? 'bg-blue-50 text-blue-600' :
+                              (getAppointmentStatusKey(apt) === 'cancelled' || getAppointmentStatusKey(apt) === 'declined') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                            }`}>
+                              {getAppointmentStatusLabel(apt)}
+                            </span>
+                          </div>
+                          <div className="mb-1 text-lg font-black text-gray-900 group-hover:text-blue-600 transition-colors">{apt.name}</div>
+                          <div className="text-sm font-bold text-gray-400">{apt.course || 'No Department'}</div>
+                          <div className="absolute right-0 bottom-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <ChevronRight size={20} className="text-blue-600" />
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
           )}
 
           {activeItem === 'analytics' && (
-            <div className="analytics-panel">
-              <div className="analytics-tabs" style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
-                <div style={{display:'flex', gap:8}}>
-                  <button className={`tab-btn ${analyticsTab==='history' ? 'active' : ''}`} onClick={() => setAnalyticsTab('history')}>Appointment History</button>
-                  <button className={`tab-btn ${analyticsTab==='charts' ? 'active' : ''}`} onClick={() => setAnalyticsTab('charts')}>Analytics</button>
+            <div className="analytics-panel space-y-8">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                <div className="flex bg-gray-100 p-1 rounded-xl w-fit">
+                  <button className={`px-6 py-2 rounded-lg font-bold transition-all ${analyticsTab==='history' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setAnalyticsTab('history')}>Record History</button>
+                  <button className={`px-6 py-2 rounded-lg font-bold transition-all ${analyticsTab==='charts' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setAnalyticsTab('charts')}>Visual Reports</button>
                 </div>
-                <div style={{display:'flex', gap:8}}>
-                  <input placeholder="Search" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} style={{padding:8, borderRadius:8, border:'1px solid #ddd'}} />
-                  <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{padding:8, borderRadius:8}}>
-                    {getDepartments().map(d=> <option key={d} value={d}>{d === 'All' ? 'Program' : d}</option>)}
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Common Filters */}
+                  <select 
+                    value={filterDept} 
+                    onChange={e=>setFilterDept(e.target.value)} 
+                    className="px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-gray-600 bg-white"
+                  >
+                    {getDepartments().map(d => <option key={d} value={d}>{d === 'All' ? 'All Departments' : d}</option>)}
                   </select>
-                  <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:8, borderRadius:8}}>
-                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <input type="date" value={fromDateFilter} onChange={e=>setFromDateFilter(e.target.value)} style={{padding:8, borderRadius:8}} />
-                  <input type="date" value={toDateFilter} onChange={e=>setToDateFilter(e.target.value)} style={{padding:8, borderRadius:8}} />
-                  <button className="export-btn" onClick={()=>{ const rows = filteredAppointments(); downloadCSV(rows) }}>Export CSV</button>
-                  <button className="export-btn" onClick={()=>{ const rows = filteredAppointments(); exportPDF(rows) }}>Export PDF</button>
+
+                  {analyticsTab === 'history' && (
+                    <>
+                  <div className="relative flex items-center">
+                    <Search className="absolute left-4 text-gray-400" size={18} />
+                    <input 
+                      placeholder="Search student or reason..." 
+                      value={searchQuery} 
+                      onChange={e=>setSearchQuery(e.target.value)} 
+                      className="pl-12 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-72 text-sm transition-all" 
+                    />
+                  </div>
+                      <select 
+                        value={filterStatus} 
+                        onChange={e=>setFilterStatus(e.target.value)} 
+                        className="px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-gray-600 bg-white"
+                      >
+                        {statusOptions.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                      </select>
+                    </>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button 
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-bold shadow-lg shadow-blue-100 text-sm" 
+                      onClick={()=>{ const rows = filteredAppointments(); downloadCSV(rows) }}
+                    >
+                      <FileDown size={18} />
+                      Export CSV
+                    </button>
+                    <button 
+                      className="flex items-center gap-2 px-4 py-2 bg-white text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-bold shadow-sm text-sm" 
+                      onClick={()=>{ const rows = filteredAppointments(); exportPDF(rows) }}
+                    >
+                      <FileText size={18} />
+                      Export PDF
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {analyticsTab === 'history' ? (
-                <div className="history-table" style={{marginTop:16}}>
-                  <table style={{width:'100%', borderCollapse:'collapse'}}>
-                    <thead style={{color:'#888'}}>
-                      <tr>
-                        <th style={{textAlign:'left', padding:10}}>Date</th>
-                        <th style={{textAlign:'left', padding:10}}>Time</th>
-                        <th style={{textAlign:'left', padding:10}}>Name</th>
-                        <th style={{textAlign:'left', padding:10}}>Department</th>
-                        <th style={{textAlign:'left', padding:10}}>Reason</th>
-                        <th style={{textAlign:'left', padding:10}}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredAppointments().length === 0 ? (
-                        <tr><td colSpan={6} style={{padding:60, textAlign:'center', color:'#2b6cb0'}}>No appointments yet</td></tr>
-                      ) : filteredAppointments().map(a => (
-                        <tr key={a.id} style={{borderTop:'1px solid #f1f1f1'}}>
-                          <td style={{padding:10}}>{a.date || a.iso || ''}</td>
-                          <td style={{padding:10}}>{a.start || a.time || ''}</td>
-                          <td style={{padding:10}}>{a.name}</td>
-                          <td style={{padding:10}}>{a.department || a.course || ''}</td>
-                          <td style={{padding:10}}>{a.reason}</td>
-                          <td style={{padding:10}}>{
-                            a.status === 'pending' ? 'For Approval'
-                            : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
-                            : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
-                            : a.status === 'rescheduled' ? 'Rescheduled'
-                            : (a.status === 'done' || a.status === 'completed') ? 'Completed'
-                            : ((a.status || '').toLowerCase() === 'cancelled') ? 'Cancelled'
-                            : ((a.status || '').toLowerCase() === 'declined') ? 'Declined'
-                            : a.status
-                          }</td>
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Date & Time</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Student Name</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Department</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Reason</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Status</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {filteredAppointments().length === 0 ? (
+                          <tr><td colSpan={6} className="py-24 text-center text-gray-400 font-bold bg-gray-50/30">No records found matching your filters</td></tr>
+                        ) : filteredAppointments().map(a => (
+                          <tr key={a.id} className="hover:bg-gray-50/80 transition-colors group">
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-black text-gray-900">{a.date || a.iso || ''}</div>
+                              <div className="text-xs font-bold text-gray-400 mt-0.5">{a.start || a.time || ''}</div>
+                            </td>
+                            <td className="px-6 py-4 font-black text-gray-900 text-sm">{a.name}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-black text-gray-500">{a.department || a.course || '—'}</span>
+                            </td>
+                            <td className="px-6 py-4 text-sm font-bold text-gray-600 truncate max-w-[200px]">{a.reason}</td>
+                            <td className="px-6 py-4">
+                              <span className={`sidebar-card-status status-text status-${getAppointmentStatusKey(a)}${isAppointmentOngoing(a) ? ' status-ongoing' : ''}`}>
+                                {getAppointmentStatusLabel(a)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => { setSelectedAppointment(a); setDetailsOpen(true) }}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <MoreVertical size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
-                <div className="analytics-charts" style={{display:'flex', gap:20, marginTop:16}}>
-                  <div style={{flex:1, padding:12, border:'1px solid #f1f1f1', borderRadius:8, background:'#fff'}}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                      <h4 style={{marginTop:0}}>Bookings</h4>
-                      <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                        <label style={{fontSize:13, color:'#556'}}>Range</label>
-                        <select value={chartRange} onChange={e=>setChartRange(e.target.value)} style={{padding:6, borderRadius:8}}>
-                          <option value="weekly">Weekly (Mon–Fri)</option>
-                          <option value="monthly">Monthly</option>
-                        </select>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  <div className="lg:col-span-8 bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                      <div>
+                        <h4 className="text-xl font-black text-gray-900">Appointment Volume</h4>
+                        <p className="text-sm font-bold text-gray-400 mt-1">Number of bookings across workdays</p>
                       </div>
+                      <select value={chartRange} onChange={e=>setChartRange(e.target.value)} className="text-xs font-black text-gray-500 bg-gray-50 px-4 py-2 rounded-xl border-none focus:ring-0 uppercase tracking-widest">
+                        <option value="weekly">This Week</option>
+                        <option value="monthly">Full Year</option>
+                      </select>
                     </div>
-                    <div style={{height:240}}>
-                      <Bar data={barChartData()} options={{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, ticks:{stepSize:1} } } }} />
+                    <div className="h-[350px]">
+                      <Bar 
+                        data={barChartData()} 
+                        options={{ 
+                          responsive:true, 
+                          maintainAspectRatio:false, 
+                          plugins:{legend:{display:false}}, 
+                          scales:{ 
+                            y:{ beginAtZero:true, ticks:{stepSize:1, font:{weight:'bold'}}, grid:{color:'#f8fafc'} }, 
+                            x:{ grid:{display:false}, ticks:{font:{weight:'bold'}} } 
+                          } 
+                        }} 
+                      />
                     </div>
                   </div>
 
-                  <div style={{width:420, padding:12, border:'1px solid #f1f1f1', borderRadius:8, background:'#fff'}}>
-                    <h4 style={{marginTop:0}}>Status breakdown</h4>
-                    <div style={{height:240, display:'flex', alignItems:'center', justifyContent:'center'}}>
-                      <div style={{width:220}}>
-                        <Pie data={pieChartData()} options={{ responsive:true, maintainAspectRatio:true, plugins:{legend:{position:'bottom'}} }} />
+                  <div className="lg:col-span-4 bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm flex flex-col">
+                    <h4 className="text-xl font-black text-gray-900 mb-2">Status Distribution</h4>
+                    <p className="text-sm font-bold text-gray-400 mb-8">Breakdown of all appointment statuses</p>
+                    <div className="flex-1 flex flex-col justify-center">
+                      <div className="h-[250px] relative">
+                        <Pie 
+                          data={pieChartData()} 
+                          options={{ 
+                            responsive:true, 
+                            maintainAspectRatio:false, 
+                            plugins:{
+                              legend:{
+                                position:'bottom', 
+                                labels: { 
+                                  usePointStyle: true, 
+                                  padding: 25,
+                                  font: { weight: 'bold', size: 11 }
+                                } 
+                              } 
+                            } 
+                          }} 
+                        />
                       </div>
-                    </div>
-                    <div style={{marginTop:8}}>
-                      {Object.entries(computeStatusPie()).map(([k,v],i)=> (
-                        <div key={k} style={{display:'flex', gap:8, alignItems:'center', padding:'6px 0'}}>
-                          <div style={{width:12, height:12, background:['#2b6cb0','#48bb78','#f6ad55','#f56565','#a0aec0'][i%5], borderRadius:4}} />
-                          <div style={{flex:1, fontWeight:700}}>{k === 'confirmed' ? 'rescheduled' : k}</div>
-                          <div style={{color:'#666'}}>{v}</div>
-                        </div>
-                      ))}
+                      
+                      <div className="mt-8 space-y-3">
+                        {pieChartData().labels.map((label, idx) => (
+                          <div key={label} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                              <div className="w-2 h-2 rounded-full" style={{backgroundColor: pieChartData().datasets[0].backgroundColor[idx]}} />
+                              <span className="text-xs font-black text-gray-600 uppercase tracking-wider">{label}</span>
+                            </div>
+                            <span className="text-sm font-black text-gray-900">{pieChartData().datasets[0].data[idx]}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1001,718 +997,618 @@ useEffect(() => {
             </div>
           )}
 
-          {activeItem === 'calendar' && (
-          <div className="admin-sidebar">
-            <div className="sidebar-section">
-              <h3>Appointments</h3>
-                  <button className="sidebar-link" onClick={() => setShowAllModal(true)}>View all</button>
-            </div>
-            {(() => {
-              const visible = appointments.filter(a => a.iso === selectedIso)
-              if (visible.length === 0) return <div className="sidebar-empty">No appointments for this day</div>
-              return visible.map(apt => (
-                <div key={apt.id} className={`sidebar-card ${
-                  String(apt.status || '').toLowerCase() === 'confirmed' ? 'status-confirmed'
-                  : String(apt.status || '').toLowerCase() === 'approved' ? 'status-approved'
-                  : String(apt.status || '').toLowerCase() === 'pending' ? 'status-pending'
-                  : String(apt.status || '').toLowerCase() === 'rescheduled' ? 'status-rescheduled'
-                  : (String(apt.status || '').toLowerCase() === 'done' || String(apt.status || '').toLowerCase() === 'completed') ? 'status-done'
-                  : String(apt.status || '').toLowerCase() === 'cancelled' ? 'status-cancelled'
-                  : 'status-declined'
-                }`}>
-                <div className="sidebar-card-meta">
-                  <span className="sidebar-card-time-meta">{(() => {
-                    // Prefer rescheduled values when present; otherwise use iso/date and start/time
-                    const maybeTs = (typeof apt.id === 'number' && apt.id > 1000000000) ? new Date(apt.id) : (apt.submittedAt ? new Date(apt.submittedAt) : null)
-                    const now = new Date()
-                    const timeStr = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    if (maybeTs) {
-                      if (maybeTs.toDateString() === now.toDateString()) return `Today at ${timeStr(maybeTs)}`
-                      return `${maybeTs.toLocaleDateString()} at ${timeStr(maybeTs)}`
-                    }
-                    const scheduledIso = apt.rescheduleDate || apt.reschedule_date || apt.iso || (apt.date ? toIsoDate(apt.date) : '')
-                    const scheduledStart = apt.rescheduleStart || apt.reschedule_start || apt.start || apt.time || ''
-                    if (scheduledStart) {
-                      const todayIso = toIsoDate(new Date())
-                      if (scheduledIso === todayIso) return `Today at ${scheduledStart}`
-                      return `${scheduledIso ? isoToLocalDateString(scheduledIso) + ' at ' + scheduledStart : (apt.date ? apt.date + ' at ' + scheduledStart : scheduledStart)}`
-                    }
-                    return scheduledIso ? isoToLocalDateString(scheduledIso) : (apt.date || '')
-                  })()}</span>
-                  {(() => {
-                    const status = String(apt.status || '').toLowerCase()
-                    const ongoing = isAppointmentOngoing(apt)
-                    const cls = status === 'confirmed' ? 'status-confirmed'
-                      : status === 'approved' ? 'status-approved'
-                      : status === 'pending' ? 'status-pending'
-                      : status === 'rescheduled' ? 'status-rescheduled'
-                      : (status === 'done' || status === 'completed') ? 'status-done'
-                      : status === 'cancelled' ? 'status-cancelled'
-                      : 'status-declined'
-                    return (
-                      <span className={`sidebar-card-status status-text ${cls}${ongoing ? ' status-ongoing' : ''}`}>
-                        { status === 'confirmed' ? (ongoing ? 'Ongoing' : 'Rescheduled')
-                          : status === 'approved' ? (ongoing ? 'Ongoing' : 'Approved')
-                          : status === 'pending' ? 'For Approval'
-                          : status === 'rescheduled' ? 'Rescheduled'
-                          : (status === 'done' || status === 'completed') ? <span className="status-text status-completed">Completed</span>
-                          : status === 'declined' ? 'Declined'
-                          : 'Cancelled'
-                        }
-                      </span>
-                    )
-                  })()}
-                </div>
-
-                  <div className="sidebar-card-left">
-                  <div className="sidebar-card-icon">🕗</div>
-                  <div className="sidebar-card-time-left">{(apt.rescheduleStart || apt.reschedule_start || apt.start || apt.time) || ''}{(apt.rescheduleStart || apt.reschedule_start || apt.start) && (apt.rescheduleEnd || apt.reschedule_end || apt.end) ? ' - ' + (apt.rescheduleEnd || apt.reschedule_end || apt.end) : ''}</div>
-                </div>
-
-                <div className="sidebar-card-info">
-                  <div className="sidebar-card-name">{apt.name}</div>
-                  {apt.course && <div className="sidebar-card-course">{apt.course}</div>}
-
-                  {/* Identifier: student ID, role (alumni/teaching), guest, or email */}
-                  {apt.guest ? (
-                    <div className="sidebar-card-identifier">Guest</div>
-                  ) : apt.studentId ? (
-                    <div className="sidebar-card-identifier">Student ID: {apt.studentId}</div>
-                  ) : apt.role ? (
-                    <div className="sidebar-card-identifier">{apt.role}</div>
-                  ) : apt.email ? (
-                    <div className="sidebar-card-identifier">{apt.email}</div>
-                  ) : null}
-
-                </div>
-
-                <span onClick={() => { setSelectedAppointment(apt); setDetailsOpen(true) }} className="sidebar-view" style={{cursor:'pointer'}}>View Details</span>
-                {String(apt.status || '').toLowerCase() === 'cancelled' && (() => {
-                  const key = String(apt.cancelled_by || apt.cancelledBy || apt.adminNote || '').toLowerCase()
-                  const isAdminCancel = key === 'admin' || key.includes('admin')
-                  const isStudentOrGuest = !!apt.guest || !!apt.studentId || String(apt.role || '').toLowerCase() === 'student'
-                  return (isAdminCancel && isStudentOrGuest) ? (
-                    <button className="reschedule-open-btn" onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); setRescheduleData({ date: (apt.iso || apt.date) || '', start: apt.start || apt.time || '', end: apt.end || '', reason: apt.reason || '' }); setRescheduleOpen(true) }} style={{marginLeft:8}}>Reschedule</button>
-                  ) : null
-                })()}
-              </div>
-              ))
-            })()}
-          </div>
-          )}
-          {/* Availability panel (when selected from Sidebar) */}
           {activeItem === 'availability' && (
-            <>
-            <div className="availability-panel">
-              <div style={{background:'#fff', borderRadius:12, padding:20, boxShadow:'0 6px 18px rgba(15,23,42,0.06)'}}>
-                <h2 style={{marginTop:0}}>Office Hours Availability
-                  <span className="help-tooltip" aria-label="Pre-set dated availability">
-                    ?
-                    <div className="help-tooltip-content">
-                      <div className="help-tooltip-title">Pre-set date/time</div>
-                      <div className="help-tooltip-desc" style={{marginTop:6, fontSize:13, color:'#556'}}>
-                        Select the dates and times when the dean is available for student consultations.
+            <div className="grid grid-cols-1 gap-8">
+              <div className="availability-panel bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                      Office Hours
+                      <div className="group relative">
+                        <HelpCircle size={20} className="text-gray-400 cursor-help" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-64 p-4 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                          Configure regular weekly consulting hours for each day. Students will see these slots during booking.
+                        </div>
+                      </div>
+                    </h2>
+                    <p className="text-gray-500 mt-1">Set recurring weekly availability for student consultations</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                  {['Monday','Tuesday','Wednesday','Thursday','Friday'].map(day => (
+                    <div key={day} className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-blue-200 transition-colors group">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="font-bold text-gray-900 text-lg">{day}</h3>
+                        <button 
+                          onClick={() => { setScheduleDay(day); setScheduleOpen(true); setNewStart(''); setNewEnd(''); setNewDate(''); setNewType('') }}
+                          className="p-1.5 bg-white text-blue-600 rounded-lg shadow-sm border border-gray-100 hover:bg-blue-50 transition-colors"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(availability[day] && availability[day].length) ? availability[day].map((r, i) => (
+                          <div key={i} className="bg-white px-3 py-2 rounded-xl text-sm font-bold text-blue-700 shadow-sm border border-blue-50 flex items-center justify-center">
+                            {r.start} - {r.end}
+                          </div>
+                        )) : (
+                          <div className="py-4 text-center text-gray-400 text-sm font-medium border-2 border-dashed border-gray-200 rounded-2xl">
+                            No slots
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </span>
-                </h2>
-                <div className="availability-list">
-                  {['Monday','Tuesday','Wednesday','Thursday','Friday'].map(day => (
-                    <div key={day} className="weekday-row">
-                      <div className="weekday-day">
-                        <div className="weekday-name">{day}</div>
-                        <div className={`weekday-sub ${(availability[day] && availability[day].length) ? 'has-schedule' : 'no-schedule'}`}>
-                            {(availability[day] && availability[day].length) ? availability[day].map((r, i) => (
-                              <div key={i} style={{marginBottom:8}}>
-                                <div style={{fontWeight:500}}>{r.start} to {r.end}</div>
-                              </div>
-                            )) : 'No Schedule'}
+                   ))}
+                </div>
+              </div>
+
+              <div className="availability-panel bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                      Special Availability
+                      <div className="group relative">
+                        <HelpCircle size={20} className="text-gray-400 cursor-help" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-64 p-4 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                          Override weekly hours for specific dates. Useful for holidays or special events.
+                        </div>
+                      </div>
+                    </h2>
+                    <p className="text-gray-500 mt-1">Manage one-time availability slots for specific dates</p>
+                  </div>
+                  <button 
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all font-bold shadow-lg shadow-blue-100"
+                    onClick={() => { setShowAddDatedModal(true); setNewDatedDate(''); setNewDatedType(''); setNewDatedStart(''); setNewDatedEnd('') }}
+                  >
+                    <Plus size={20} /> Add Special Slot
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {datedRows.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                      <p className="text-gray-400 font-medium">No special slots scheduled</p>
+                    </div>
+                  ) : datedRows.map(r => (
+                    <div key={r.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="text-blue-600 font-bold text-sm uppercase tracking-wider mb-1">{r.day}</div>
+                          <div className="text-gray-900 font-extrabold text-lg">
+                            {isoToLocalDateString(r.date, { month: 'long', day: 'numeric', year: 'numeric' })}
                           </div>
+                        </div>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                            onClick={() => {
+                              setEditingAvailId(r.id)
+                              setNewDatedDate(r.date || '')
+                              const to24 = (t) => {
+                                if (!t) return ''
+                                try {
+                                  const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+                                  if (!m) return ''
+                                  let hh = Number(m[1])
+                                  const mm = Number(m[2])
+                                  const ampm = m[3].toUpperCase()
+                                  if (ampm === 'PM' && hh !== 12) hh += 12
+                                  if (ampm === 'AM' && hh === 12) hh = 0
+                                  return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0')
+                                } catch (e) { return '' }
+                              }
+                              setNewDatedStart(to24(r.start))
+                              setNewDatedEnd(to24(r.end))
+                              setNewDatedType(r.type || '')
+                              setShowAddDatedModal(true)
+                            }}
+                          >
+                            <FileText size={18} />
+                          </button>
+                          <button 
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                            onClick={() => removeRange(r.day, (availability[r.day] || []).findIndex(x => x.id === r.id))}
+                          >
+                            <XCircle size={18} />
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <button className="set-schedule-btn" onClick={() => { setScheduleDay(day); setScheduleOpen(true); setNewStart(''); setNewEnd(''); setNewDate(''); setNewType('') }}>+ Set Time Schedule</button>
+                      <div className="flex items-center gap-3 text-gray-600 font-bold bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
+                        <Clock size={18} className="text-blue-500" />
+                        {r.start} - {r.end}
                       </div>
+                      {r.type && (
+                        <div className="mt-3 text-sm text-gray-500 italic px-1">
+                          Reason: {r.type}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-
-            <div className="availability-panel">
-              <div style={{background:'#fff', borderRadius:12, padding:20, boxShadow:'0 6px 18px rgba(15,23,42,0.06)'}}>
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                    <h2 style={{marginTop:0}}>Available Time Slots
-                      <span className="help-tooltip" aria-label="Pre-set dated availability" style={{marginLeft:8}}>
-                        ?
-                        <div className="help-tooltip-content">
-                          <div className="help-tooltip-desc" style={{marginTop:6, fontSize:13, color:'#556'}}>List of scheduled dates and times when the dean is available. You can edit or remove a slot.</div>
-                        </div>
-                      </span>
-                    </h2>
-                    <button className="set-dated-btn" onClick={() => { setShowAddDatedModal(true); setNewDatedDate(''); setNewDatedType(''); setNewDatedStart(''); setNewDatedEnd('') }}>Add</button>
-                  </div>
-                {datedRows.length === 0 ? (
-                  <div style={{color:'#888'}}>No dated availability</div>
-                ) : (
-                  datedRows.map(r => (
-                    <div key={r.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderBottom:'1px solid #f7f7f7'}}>
-                      <div>
-                        <div style={{fontWeight:500}}>
-                          {isoToLocalDateString(r.date, { month: 'short', day: 'numeric', year: 'numeric' })} — {r.day} — {r.start} to {r.end}
-                        </div>
-                      </div>
-                      <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                        <button className="edit-btn" onClick={() => {
-                          // pre-fill modal for editing this dated availability
-                          setEditingAvailId(r.id)
-                          setNewDatedDate(r.date || '')
-                          // `r.start` and `r.end` are in 12-hour format like "1:35 PM"; convert to 24h hh:mm for input[type=time]
-                          const to24 = (t) => {
-                            if (!t) return ''
-                            try {
-                              const m = String(t).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
-                              if (!m) return ''
-                              let hh = Number(m[1])
-                              const mm = Number(m[2])
-                              const ampm = m[3].toUpperCase()
-                              if (ampm === 'PM' && hh !== 12) hh += 12
-                              if (ampm === 'AM' && hh === 12) hh = 0
-                              return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0')
-                            } catch (e) { return '' }
-                          }
-                          setNewDatedStart(to24(r.start))
-                          setNewDatedEnd(to24(r.end))
-                          setNewDatedType(r.type || '')
-                          setShowAddDatedModal(true)
-                        }}>Edit</button>
-                        <button className="close-btn" onClick={() => { removeRange(r.day, (availability[r.day] || []).findIndex(x => x.id === r.id)) }}>Remove</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-                  {showAddDatedModal && (
-                    <div className="details-modal-overlay" onClick={() => setShowAddDatedModal(false)}>
-                      <div className="details-modal open" onClick={e => e.stopPropagation()} style={{maxWidth:560}}>
-                        <h2>Add dated availability</h2>
-                        <div style={{marginTop:12}}>
-                          <label style={{display:'block', marginBottom:6}}>Date</label>
-                          <input type="date" value={newDatedDate} onChange={e => { setNewDatedDate(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.date; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-                          {datedErrors.date && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.date}</div>}
-                        </div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12}}>
-                          <div>
-                            <label style={{display:'block', marginBottom:6}}>Start time</label>
-                            <input type="time" value={newDatedStart} onChange={e => { setNewDatedStart(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.start; delete p.general; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-                            {datedErrors.start && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.start}</div>}
-                          </div>
-                          <div>
-                            <label style={{display:'block', marginBottom:6}}>End time</label>
-                            <input type="time" value={newDatedEnd} onChange={e => { setNewDatedEnd(e.target.value); setDatedErrors(prev => { const p = { ...prev }; delete p.end; delete p.general; return p }) }} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-                            {datedErrors.end && <div style={{color:'red', marginTop:6, fontSize:13}}>{datedErrors.end}</div>}
-                          </div>
-                        </div>
-                        <div style={{marginTop:12}}>
-                          <label style={{display:'block', marginBottom:6}}>Reason:</label>
-                          <input type="text" value={newDatedType} onChange={e => setNewDatedType(e.target.value)} placeholder="Reason" style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
-                        </div>
-                        {datedErrors.general && <div style={{color:'red', marginTop:8}}>{datedErrors.general}</div>}
-                        <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
-                          <button className="close-btn" onClick={() => { setShowAddDatedModal(false); setDatedErrors({}); setEditingAvailId(null) }}>Cancel</button>
-                          <button className="approve-btn" onClick={saveDatedSlot} disabled={!newDatedDate || !newDatedStart || !newDatedEnd} style={{opacity: (!newDatedDate || !newDatedStart || !newDatedEnd) ? 0.6 : 1}}>Save</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-              </div>
-            </div>
-
-            </>
-          )}
-          
-          {showCreateUser && (
-            <NewUserModal onClose={() => setShowCreateUser(false)} onCreate={handleCreateUser} />
           )}
         </div>
-        {detailsOpen && selectedAppointment && (
-          <div className="details-modal-overlay" onClick={() => setDetailsOpen(false)}>
-            <div className={`details-modal open`} onClick={(e) => e.stopPropagation()}>
-              <div className="details-top">
-                <div className="details-main">
-                    {selectedAppointment.name ? (
-                      <img src={`/Images/${selectedAppointment.name}.png`} alt={selectedAppointment.name} style={{width:64,height:64,borderRadius:'50%',objectFit:'cover',marginRight:12}} onError={(e)=>{ e.currentTarget.style.display='none' }} />
-                    ) : null}
-                    <h2 className="details-name">{selectedAppointment.name}</h2>
-                    {(selectedAppointment.course || selectedAppointment.department || selectedAppointment.courseName) && (
-                      <div className="details-course">{selectedAppointment.course || selectedAppointment.department || selectedAppointment.courseName}</div>
-                    )}
-                    {selectedAppointment.studentId ? (
-                      <div className="details-id">Student ID: {selectedAppointment.studentId}</div>
-                    ) : selectedAppointment.guest ? (
-                      <div className="details-id">Guest</div>
-                    ) : selectedAppointment.email ? (
-                      <div className="details-id">{selectedAppointment.email}</div>
-                    ) : null}
+      </main>
+
+      {detailsOpen && selectedAppointment && (
+        <div className="details-modal-overlay" onClick={() => setDetailsOpen(false)}>
+          <div className={`details-modal open bg-white`} onClick={(e) => e.stopPropagation()}>
+            <div className="details-top flex justify-between items-start mb-8">
+              <div className="details-main">
+                  <h2 className="details-name text-4xl font-black mb-2">{selectedAppointment.name}</h2>
+                  {(selectedAppointment.course || selectedAppointment.department) && (
+                    <div className="details-course text-xl font-bold text-gray-500">{selectedAppointment.course || selectedAppointment.department}</div>
+                  )}
+                  <div className="details-id text-gray-400 font-bold mt-1">
+                    {selectedAppointment.studentId ? `ID: ${selectedAppointment.studentId}` : selectedAppointment.guest ? 'Guest' : selectedAppointment.email}
                   </div>
+                </div>
+                {(() => {
+                  const cls = `status-${getAppointmentStatusKey(selectedAppointment)}`
+                  return (
+                    <div className={`sidebar-card-status status-text ${cls}${isAppointmentOngoing(selectedAppointment) ? ' status-ongoing' : ''}`}>
+                      {getAppointmentStatusLabel(selectedAppointment)}
+                    </div>
+                  )
+                })()}
+            </div>
 
-                  {(() => {
-                    const status = String(selectedAppointment.status || '').toLowerCase()
-                    const ongoing = isAppointmentOngoing(selectedAppointment)
-                    const cls = status === 'confirmed' ? 'status-confirmed'
-                      : status === 'approved' ? 'status-approved'
-                      : status === 'pending' ? 'status-pending'
-                      : status === 'rescheduled' ? 'status-rescheduled'
-                      : (status === 'done' || status === 'completed') ? 'status-done'
-                      : status === 'cancelled' ? 'status-cancelled'
-                      : 'status-declined'
-
-                    return (
-                      <div className={`details-status status-text ${cls}${ongoing ? ' status-ongoing' : ''}`}>
-                        {
-                          status === 'confirmed' ? (ongoing ? 'Ongoing' : 'Rescheduled')
-                          : status === 'approved' ? (ongoing ? 'Ongoing' : 'Approved')
-                          : status === 'pending' ? 'For Approval'
-                          : status === 'rescheduled' ? 'Rescheduled'
-                          : (status === 'done' || status === 'completed') ? <span className="status-text status-completed">Completed</span>
-                          : status === 'declined' ? 'Declined'
-                          : 'Cancelled'
-                        }
-                      </div>
-                    )
-                  })()}
+            <div className="space-y-8">
+              <div className="details-section">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Reason for Appointment</h3>
+                <p className="text-lg text-gray-700 font-medium leading-relaxed">{selectedAppointment.reason}</p>
               </div>
 
               <div className="details-section">
-                <h3>Reason:</h3>
-                <p>{selectedAppointment.reason}</p>
-              </div>
-
-              <div className="details-section">
-                <h3>Schedule Date:</h3>
-                <p>{(selectedAppointment.iso || selectedAppointment.date) ? isoToLocalDateString(selectedAppointment.iso || selectedAppointment.date, { month: 'long', day: 'numeric', year: 'numeric' }) : ''}{selectedAppointment.start ? ' at ' + selectedAppointment.start : ''}{selectedAppointment.end ? ' to ' + selectedAppointment.end : ''}</p>
-              </div>
-
-              {selectedAppointment.submittedAt && (
-                <div className="details-section">
-                  <h3>Submitted:</h3>
-                  <p>{new Date(selectedAppointment.submittedAt).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Schedule Details</h3>
+                <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <Calendar className="text-blue-500" size={24} />
+                  <div>
+                    <div className="font-bold text-gray-900">{isoToLocalDateString(selectedAppointment.iso || selectedAppointment.date, { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                    <div className="text-gray-500 font-bold">{selectedAppointment.start || selectedAppointment.time} {selectedAppointment.end ? ` - ${selectedAppointment.end}` : ''}</div>
+                  </div>
                 </div>
-              )}
-
-              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && selectedAppointment.cancelReason && (
-                <div className="details-section">
-                  <h3>Cancellation reason:</h3>
-                  <p>{selectedAppointment.cancelReason}</p>
-                </div>
-              )}
+              </div>
 
               {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (
                 <div className="details-section">
-                  <h3>Cancelled by:</h3>
-                  <p>{getCancelledByDisplay(selectedAppointment)}</p>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Cancellation Details</h3>
+                  {(selectedAppointment.cancelReason || selectedAppointment.cancel_reason) ? (
+                    <p className="text-lg text-gray-700 font-medium leading-relaxed">
+                      <span className="font-bold">Reason: </span>
+                      {selectedAppointment.cancelReason || selectedAppointment.cancel_reason}
+                    </p>
+                  ) : (
+                    <p className="text-lg text-gray-700 font-medium leading-relaxed">No reason provided.</p>
+                  )}
+                  {(selectedAppointment.cancelled_by_name || selectedAppointment.cancelled_by || selectedAppointment.cancelledBy || selectedAppointment.cancelledByName) && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      Cancelled by: {selectedAppointment.cancelled_by_name || selectedAppointment.cancelled_by || selectedAppointment.cancelledByName || selectedAppointment.cancelledBy}
+                    </p>
+                  )}
+                  {(selectedAppointment.cancelled_at || selectedAppointment.cancelledAt) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Cancelled at: {new Date(selectedAppointment.cancelled_at || selectedAppointment.cancelledAt).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               )}
 
-              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at) && (
+              {selectedAppointment.submittedAt && (
                 <div className="details-section">
-                  <h3>Cancelled at:</h3>
-                  <p>{new Date(selectedAppointment.cancelledAt || selectedAppointment.cancelled_at || selectedAppointment.cancelled_at).toLocaleString([], { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Submission Date</h3>
+                  <p className="text-gray-600 font-bold">{new Date(selectedAppointment.submittedAt).toLocaleString()}</p>
                 </div>
               )}
-
-              {selectedAppointment.status === 'rescheduled' && (
-                <div className="details-section">
-                  <h3>Rescheduled:</h3>
-                  <p>Rescheduled on {selectedAppointment.date} at {selectedAppointment.start}. (Set {selectedAppointment.rescheduledAt ? new Date(selectedAppointment.rescheduledAt).toLocaleString() : ''})</p>
-                </div>
-              )}
-              {selectedAppointment.status === 'declined' && selectedAppointment.adminNote && (
-                <div className="details-section">
-                  <h3>Decline reason:</h3>
-                  <p>{selectedAppointment.adminNote}</p>
-                </div>
-              )}
-
-              <div className="details-actions">{renderDetailsActions()}</div>
             </div>
-          </div>
-        )}
 
-        {showAllModal && (
-          <div className="details-modal-overlay" onClick={() => setShowAllModal(false)}>
-            <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:800}}>
-              <h2>All appointments for {selectedDate.toDateString()}</h2>
-              <div style={{marginTop:12}}>
-                {appointments.filter(a => a.iso === selectedIso).map(a => (
-                  <div key={a.id} style={{padding:12, borderBottom:'1px solid #eee', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <div>
-                      <div style={{fontWeight:800}}>{a.name}</div>
-                      <div style={{color:'#556'}}>{a.start || a.time} {a.end ? ' - ' + a.end : ''} • {a.reason}</div>
-                    </div>
-                    <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                      <div className={`status-text ${isAppointmentOngoing(a) ? 'status-ongoing' : ''}`} style={{fontWeight:700, color: 
-                        isAppointmentOngoing(a) ? '#D9730D'
-                        : a.status === 'pending' ? '#60A5FA'
-                        : a.status === 'approved' ? '#2FC26A'
-                        : a.status === 'confirmed' ? '#B45309'
-                        : a.status === 'done' ? '#0E8A32'
-                        : '#A33131'}}>
-                        {a.status === 'pending' ? 'For Approval' 
-                          : a.status === 'approved' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Approved')
-                          : a.status === 'confirmed' ? (isAppointmentOngoing(a) ? 'Ongoing' : 'Rescheduled')
-                          : a.status === 'done' ? 'Done'
-                          : 'Cancelled'}
-                      </div>
-                      <button className="view-details-btn" onClick={() => { setSelectedAppointment(a); setDetailsOpen(true); setShowAllModal(false) }}>View</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{display:'flex', justifyContent:'flex-end', marginTop:14}}>
-                <button className="close-btn" onClick={() => setShowAllModal(false)}>Close</button>
-              </div>
-            </div>
-          </div>
-        )}
+            <div className="details-actions flex justify-end gap-4 mt-12 pt-8 border-t border-gray-100">
+              <button className="close-btn" onClick={() => setDetailsOpen(false)}>Close</button>
 
-        <Toast show={showConfirm} type={confirmType} message={confirmMessage} onClose={() => setShowConfirm(false)} />
-
-        {rescheduleOpen && selectedAppointment && (
-          <div className="details-modal-overlay" onClick={() => setRescheduleOpen(false)}>
-            <div className="reschedule-modal" onClick={(e) => e.stopPropagation()}>
-              <h2>Reschedule</h2>
-              <p>Fill out the form below to reschedule your appointment with the Student Affairs Office</p>
-              <div style={{display:'flex', gap:20, marginTop:18}}>
-                <div style={{flex:'1 1 0'}}>
-                  <label style={{display:'block', marginBottom:8}}>Choose date</label>
-                  <input type="date" value={rescheduleData.date} onChange={e => setRescheduleData(d => ({ ...d, date: e.target.value }))} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ccc'}} />
-                </div>
-                <div style={{flex:'1 1 0'}}>
-                  <label style={{display:'block', marginBottom:8}}>Choose start time</label>
-                  <input type="time" value={rescheduleData.start} onChange={e => setRescheduleData(d => ({ ...d, start: e.target.value }))} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ccc'}} />
-                  <label style={{display:'block', marginTop:12, marginBottom:8}}>Choose end time</label>
-                  <input type="time" value={rescheduleData.end} onChange={e => setRescheduleData(d => ({ ...d, end: e.target.value }))} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ccc'}} />
-                </div>
-              </div>
-
-              <div style={{marginTop:14}}>
-                <label style={{display:'block', marginBottom:8}}>Email</label>
-                <input type="email" value={selectedAppointment.email} readOnly style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #ddd', background:'#f7f7f7'}} />
-              </div>
-
-              {/* Validation panel removed: button will be disabled until inputs look valid */}
-
-                <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:18}}>
-                <button className="close-btn" onClick={() => setRescheduleOpen(false)}>Back</button>
-                <button className="approve-btn" disabled={!rescheduleCanSend || rescheduleChecking} onClick={async () => {
-                  // client-side validation before sending
-                  setRescheduleErrors([])
-                  const validateReschedule = async () => {
-                    const errs = []
-                    const { date, start, end } = rescheduleData || {}
-                    if (!date) errs.push('Date is required')
-                    if (!start) errs.push('Start time is required')
-                    if (!end) errs.push('End time is required')
-                    // parse times HH:MM
-                    const toMins = (t) => {
-                      if (!t) return null
-                      const m = String(t).split(':')
-                      if (m.length < 2) return null
-                      const hh = parseInt(m[0], 10)
-                      const mm = parseInt(m[1], 10)
-                      if (isNaN(hh) || isNaN(mm)) return null
-                      return hh * 60 + mm
-                    }
-                    const s = toMins(start)
-                    const e = toMins(end)
-                    if (s === null || e === null) errs.push('Invalid time format')
-                    if (s !== null && e !== null && s >= e) errs.push('Start time must be before end time')
-                    // not in the past
-                    try {
-                      if (date && s !== null) {
-                        const proposed = new Date(`${date}T${String(start).padStart(5,'0')}`)
-                        if (proposed.getTime() < Date.now() - 60000) errs.push('Proposed start is in the past')
-                      }
-                    } catch (e) {}
-
-                    // availability check: ensure there is an availability slot that contains the requested range
-                    if (date && s !== null && e !== null) {
-                      try {
-                        const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-                        const wd = weekDays[new Date(date).getDay()]
-                        const ranges = (availability && availability[wd]) ? availability[wd] : []
-                        // allow dated availability entries (r.date === date)
-                        const ok = (ranges || []).some(r => {
-                          if (!r) return false
-                          // if r has date, it must match
-                          if (r.date && String(r.date).slice(0,10) !== String(date).slice(0,10)) return false
-                          const rs = toMins(r.start)
-                          const re = toMins(r.end)
-                          if (rs === null || re === null) return false
-                          return s >= rs && e <= re
+              {/* Reschedule when cancelled by admin */}
+              {String(selectedAppointment.status || '').toLowerCase() === 'cancelled' && (
+                (() => {
+                  const cancelledByVal = selectedAppointment.cancelled_by || selectedAppointment.cancelledBy || selectedAppointment.cancelledByName || selectedAppointment.cancelled_by_name || ''
+                  const isAdminCancelled = String(cancelledByVal).toLowerCase() === 'admin'
+                  return isAdminCancelled ? (
+                    <button
+                      className="reschedule-btn"
+                      onClick={() => {
+                        setRescheduleData({
+                          date: selectedAppointment.iso || selectedAppointment.date || '',
+                          start: selectedAppointment.start || selectedAppointment.time || '',
+                          end: selectedAppointment.end || '',
+                          reason: ''
                         })
-                        if (!ok) errs.push('Requested time does not fit any availability slot')
-                      } catch (e) {}
+                        setRescheduleOpen(true)
+                      }}
+                    >
+                      Request Reschedule
+                    </button>
+                  ) : null
+                })()
+              )}
+
+              {selectedAppointment.status === 'pending' && (
+                <>
+                  <button className="decline-btn" onClick={() => {
+                    setDeclineReason('')
+                    setDeclineReasonType('other')
+                    setShowDeclineModal(true)
+                  }}>Decline</button>
+                  <button className="approve-btn" disabled={isApproving} onClick={async () => {
+                    setIsApproving(true)
+                    const res = await updateAppointmentStatus(selectedAppointment.id, 'approved', {}, true)
+                    setIsApproving(false)
+
+                    if (!res || !res.ok) {
+                      setConfirmType('error')
+                      setConfirmMessage(res?.error || 'Unable to approve appointment')
+                      setShowConfirm(true)
+                      return
                     }
 
-                    // conflict and daily limit checks using existing appointments
-                    try {
-                      const res = await listAppointments()
-                      if (res && res.ok) {
-                        const iso = String(date)
-                        const existing = (res.data || []).filter(a => {
-                          const apIso = a.iso || (a.date ? (typeof a.date === 'string' && a.date.length === 10 ? a.date : '') : '')
-                          if (!apIso) return false
-                          if (apIso !== iso) return false
-                          if ((a.status || '').toLowerCase() === 'cancelled') return false
-                          return a.id !== selectedAppointment.id
-                        })
-                        // daily limit
-                        if (existing.length >= 5) errs.push('Daily appointment limit reached for selected date')
-                        // conflict: overlapping times
-                        const overlaps = (otherStart, otherEnd, s2, e2) => Math.max(otherStart, s2) < Math.min(otherEnd, e2)
-                        const conflicts = existing.some(a => {
-                          const aStart = toMins(a.start || a.time || '')
-                          const aEnd = toMins(a.end || '')
-                          if (aStart === null || aEnd === null) return false
-                          return overlaps(aStart, aEnd, s, e)
-                        })
-                        if (conflicts) errs.push('Requested time conflicts with another appointment')
-                      }
-                    } catch (e) {}
+                    setConfirmType('success')
+                    setConfirmMessage('Appointment approved')
+                    setShowConfirm(true)
 
-                    return errs
-                  }
+                    setDetailsOpen(false)
+                    refreshAppointments()
+                  }}>{isApproving ? 'Approving...' : 'Approve'}</button>
+                </>
+              )}
+              {isAppointmentOngoing(selectedAppointment) && selectedAppointment.status === 'approved' && (
+                <button className="done-btn" onClick={async () => {
+                  setIsCompleting(true)
+                  const res = await updateAppointmentStatus(selectedAppointment.id, 'completed', {}, true)
+                  setIsCompleting(false)
 
-                    setRescheduleChecking(true)
-                    const errors = await validateReschedule()
-                  setRescheduleChecking(false)
-                  if (errors && errors.length > 0) {
-                    // don't render the inline panel; alert instead
-                    alert(errors.join('\n'))
+                  if (!res || !res.ok) {
+                    setConfirmType('error')
+                    setConfirmMessage(res?.error || 'Unable to mark appointment as done')
+                    setShowConfirm(true)
                     return
                   }
 
-                  // Call backend to apply and approve reschedule
-                  try {
-                    await updateAppointmentStatus(selectedAppointment.id, 'confirmed', { rescheduleDate: rescheduleData.date, rescheduleStart: rescheduleData.start, rescheduleEnd: rescheduleData.end, rescheduleReason: rescheduleData.reason, approveReschedule: true }, true)
-                  } catch (e) {
-                    // ignore - we'll refresh to get server state
+                  setConfirmType('success')
+                  setConfirmMessage('Appointment marked as completed')
+                  setShowConfirm(true)
+
+                  setDetailsOpen(false)
+                  refreshAppointments()
+                }}>Mark as Done</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAllModal && (
+        <div className="details-modal-overlay" onClick={() => setShowAllModal(false)}>
+          <div className="details-modal open bg-white rounded-[32px] p-10" onClick={(e) => e.stopPropagation()} style={{maxWidth:800}}>
+            <h2 className="text-3xl font-black mb-8">Appointments for {selectedDate.toDateString()}</h2>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-4">
+              {appointments.filter(a => a.iso === selectedIso).map(a => (
+                <div key={a.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex justify-between items-center hover:border-blue-200 transition-all">
+                  <div>
+                    <div className="text-lg font-black text-gray-900">{a.name}</div>
+                    <div className="text-gray-500 font-bold">{a.start || a.time} • {a.reason}</div>
+                  </div>
+                  <button className="text-blue-600 font-bold px-6 py-2 bg-white rounded-xl shadow-sm hover:shadow-md transition-all" onClick={() => { setSelectedAppointment(a); setDetailsOpen(true); setShowAllModal(false) }}>View</button>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end mt-10">
+              <button className="close-btn" onClick={() => setShowAllModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeclineModal && selectedAppointment && (
+        <ModalNoOverlay className="decline-modal" onClose={() => setShowDeclineModal(false)}>
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Cancel Appointment</h2>
+            <p className="text-sm text-gray-600">Please provide a reason for canceling this appointment.</p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-2">Reason type</label>
+              <select
+                value={declineReasonType}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setDeclineReasonType(value)
+                  if (value === 'other') {
+                    setDeclineReason('')
+                  } else if (value === 'unavailable') {
+                    setDeclineReason('Slot unavailable')
+                  } else if (value === 'incomplete') {
+                    setDeclineReason('Incomplete details')
+                  } else if (value === 'policy') {
+                    setDeclineReason('Against policy')
                   }
-                  // update local UI for immediate feedback
-                  const resAt = Date.now()
-                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, date: rescheduleData.date || a.date, iso: (rescheduleData.date || a.date) ? (rescheduleData.date || a.date) : a.iso, start: rescheduleData.start || a.start, end: rescheduleData.end || a.end, reason: rescheduleData.reason || a.reason, status: 'confirmed', rescheduledAt: resAt } : a))
+                }}
+                className="w-full rounded-xl border border-gray-200 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="other">Other</option>
+                <option value="unavailable">Unavailable time</option>
+                <option value="incomplete">Incomplete details</option>
+                <option value="policy">Against policy</option>
+              </select>
+            </div>
+
+            {declineReasonType === 'other' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-2">Reason</label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  className="w-full h-24 resize-none rounded-xl border border-gray-200 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Student did not respond, slot unavailable, etc."
+                />
+              </div>
+            )}
+
+            {declineError && <div className="text-sm text-red-600">{declineError}</div>}
+
+            <div className="flex justify-end gap-3">
+              <button className="close-btn" onClick={() => setShowDeclineModal(false)} type="button">Close</button>
+              <button
+                className="decline-btn"
+                type="button"
+                disabled={isDeclining}
+                onClick={async () => {
+                  setDeclineError('')
+                  if (declineReasonType === 'other' && !declineReason.trim()) {
+                    setDeclineError('Please enter a reason for cancellation.')
+                    return
+                  }
+                  setIsDeclining(true)
+
+                  // Ensure backend sees this as an admin cancellation
+                  const res = await updateAppointmentStatus(selectedAppointment.id, 'cancelled', { cancelReason: declineReason, cancelled_by: 'admin' }, true)
+
+                  if (!res || !res.ok) {
+                    setConfirmType('error')
+                    setConfirmMessage(res?.error || 'Unable to cancel appointment')
+                    setShowConfirm(true)
+                    setIsDeclining(false)
+                    return
+                  }
+
+                  // Update UI optimistically to show admin as canceller
+                  let adminName = null
                   try {
-                    const rawNot = localStorage.getItem('notifications')
-                    const arr = rawNot ? JSON.parse(rawNot) : []
-                    arr.push({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment rescheduled', message: `Your appointment was rescheduled to ${rescheduleData.date} at ${rescheduleData.start}`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
-                    localStorage.setItem('notifications', JSON.stringify(arr))
-                  } catch (e) {}
+                    const raw = typeof window !== 'undefined' && localStorage.getItem('adminUser')
+                    const parsed = raw ? JSON.parse(raw) : null
+                    adminName = parsed ? (parsed.name || parsed.fullName || parsed.full_name || parsed.username) : null
+                  } catch (e) {
+                    adminName = null
+                  }
+
+                  setAppointments((prev) => prev.map((a) => a?.id === selectedAppointment?.id ? {
+                    ...a,
+                    status: 'cancelled',
+                    cancelReason: declineReason,
+                    cancelled_by: 'admin',
+                    cancelled_by_name: adminName,
+                    cancelled_at: new Date().toISOString()
+                  } : a))
+
+                  setSelectedAppointment((prev) => prev ? {
+                    ...prev,
+                    status: 'cancelled',
+                    cancelReason: declineReason,
+                    cancelled_by: 'admin',
+                    cancelled_by_name: adminName,
+                    cancelled_at: new Date().toISOString()
+                  } : prev)
+
+                  setConfirmType('cancelled')
+                  setConfirmMessage('Appointment cancelled')
+                  setShowConfirm(true)
+
+                  setIsDeclining(false)
+                  setShowDeclineModal(false)
+                  setDetailsOpen(false)
+                  refreshAppointments()
+                }}
+              >
+                {isDeclining ? 'Cancelling...' : 'Confirm cancellation'}
+              </button>
+            </div>
+          </div>
+        </ModalNoOverlay>
+      )}
+
+      {rescheduleOpen && selectedAppointment && (
+        <ModalNoOverlay className="reschedule-modal" onClose={() => setRescheduleOpen(false)}>
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Request Reschedule</h2>
+            <p className="text-sm text-gray-600">Choose a new date and time for this appointment.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Date</label>
+                <input
+                  type="date"
+                  value={rescheduleData.date}
+                  onChange={(e) => setRescheduleData(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Start Time</label>
+                <input
+                  type="time"
+                  value={rescheduleData.start}
+                  onChange={(e) => setRescheduleData(prev => ({ ...prev, start: e.target.value }))}
+                  className="w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">End Time</label>
+                <input
+                  type="time"
+                  value={rescheduleData.end}
+                  onChange={(e) => setRescheduleData(prev => ({ ...prev, end: e.target.value }))}
+                  className="w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Reason (optional)</label>
+                <input
+                  type="text"
+                  value={rescheduleData.reason}
+                  onChange={(e) => setRescheduleData(prev => ({ ...prev, reason: e.target.value }))}
+                  className="w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                  placeholder="Optional explanation for reschedule"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Email</label>
+                <input
+                  type="text"
+                  value={selectedAppointment?.email || selectedAppointment?.guestEmail || ''}
+                  readOnly
+                  className="w-full bg-gray-100 border-gray-100 rounded-xl p-4 text-gray-600"
+                />
+              </div>
+            </div>
+
+            {rescheduleErrors.length > 0 && (
+              <div className="text-sm text-red-600 space-y-1">
+                {rescheduleErrors.map((err, idx) => (
+                  <div key={idx}>{err}</div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="approve-btn"
+                type="button"
+                disabled={!rescheduleCanSend || rescheduleChecking}
+                onClick={async () => {
+                  const errs = []
+                  if (!rescheduleData.date) errs.push('Please select a date.')
+                  if (!rescheduleData.start) errs.push('Please select a start time.')
+                  if (!rescheduleData.end) errs.push('Please select an end time.')
+                  if (errs.length > 0) {
+                    setRescheduleErrors(errs)
+                    return
+                  }
+
+                  setRescheduleErrors([])
+                  setRescheduleChecking(true)
+
+                  const res = await requestReschedule(
+                    selectedAppointment.id,
+                    rescheduleData.date,
+                    rescheduleData.start,
+                    rescheduleData.end,
+                    rescheduleData.reason,
+                    selectedAppointment?.email || selectedAppointment?.guestEmail || ''
+                  )
+                  setRescheduleChecking(false)
+
+                  if (!res || !res.ok) {
+                    setConfirmType('error')
+                    setConfirmMessage(res?.error || 'Unable to request reschedule')
+                    setShowConfirm(true)
+                    return
+                  }
+
+                  setConfirmType('success')
+                  setConfirmMessage('Reschedule requested')
+                  setShowConfirm(true)
+
                   setRescheduleOpen(false)
                   setDetailsOpen(false)
-                  setSelectedAppointment(null)
                   refreshAppointments()
-                }}>Send</button>
-              </div>
+                }}
+              >
+                {rescheduleChecking ? 'Sending...' : 'Send Request'}
+              </button>
+              <button
+                className="close-btn"
+                type="button"
+                onClick={() => setRescheduleOpen(false)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        )}
-        {showDeclineModal && selectedAppointment && (
-          <div className="details-modal-overlay" onClick={() => setShowDeclineModal(false)}>
-            <div className="details-modal open" onClick={(e) => e.stopPropagation()} style={{maxWidth:520}}>
-              <h2>Decline appointment</h2>
-              <p>Please tell us why you're declining this appointment</p>
-              <div style={{marginTop:12}}>
-                <label style={{display:'block', marginBottom:8}}>Declining Reason</label>
-                <select value={declineReasonType} onChange={e => setDeclineReasonType(e.target.value)} style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #e6e6e6'}}>
-                  <option value="" disabled>Select reason</option>
-                  <option value="Medical_or_emergency_leave">Medical or emergency leave</option>
-                  <option value="Schedule_conflict">Schedule conflict</option>
-                  <option value="others">Others</option>
-                </select>
-                {declineReasonType === 'others' && (
-                  <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="Please provide cancellation details" style={{width:'100%', minHeight:100, padding:12, borderRadius:8, border:'1px solid #e6e6e6', marginTop:12}} />
-                )}
-              </div>
-              <div style={{display:'flex', justifyContent:'flex-end', gap:12, marginTop:14}}>
-                <button className="close-btn" onClick={() => {
-                  setShowDeclineModal(false)
-                  setDeclineReason('')
-                  setDeclineReasonType('')
-                }}>Back</button>
-                <button className="decline-btn" onClick={async () => {
-                  const type = (declineReasonType || '').trim()
-                  const otherText = (declineReason || '').trim()
-                  // validation
-                  if (!type) {
-                    setConfirmType('error')
-                    setConfirmMessage('Please select a cancellation reason.')
-                    setShowConfirm(true)
-                    setTimeout(() => setShowConfirm(false), 3000)
-                    return
-                  }
-                  if (type === 'others' && !otherText) {
-                    setConfirmType('error')
-                    setConfirmMessage('Please provide details for "Others".')
-                    setShowConfirm(true)
-                    setTimeout(() => setShowConfirm(false), 3000)
-                    return
-                  }
-                  const reasonMap = {
-                    medical_or_emergency_leave: 'Medical or emergency leave',
-                    Schedule_conflict: 'Schedule conflict',
-                    others: otherText
-                  }
-                  const reason = (reasonMap[type] !== undefined) ? reasonMap[type] : otherText
+        </ModalNoOverlay>
+      )}
 
-                  // Optimistically update local UI
-                  const cancelledTs = new Date().toISOString()
-                  const adminName = (() => { try { const raw = localStorage.getItem('adminUser'); if (raw) { const u = JSON.parse(raw||'{}'); return u.name || u.fullName || u.full_name || u.username || null } } catch(e){} return null })()
-                  setAppointments(prev => prev.map(a => a.id === selectedAppointment.id ? { ...a, status: 'cancelled', cancelReason: reason, adminNote: reason, cancelled_by: 'admin', cancelled_by_name: adminName, cancelledAt: cancelledTs, cancelled_at: cancelledTs } : a))
-                  setSelectedAppointment(prev => ({ ...prev, status: 'cancelled', cancelReason: reason, adminNote: reason, cancelled_by: 'admin', cancelled_by_name: adminName, cancelledAt: cancelledTs, cancelled_at: cancelledTs }))
 
-                  // notifications
-                  try {
-                    const raw = localStorage.getItem('notifications')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const msgReason = reason ? ` Reason: ${reason}` : ''
-                    arr.unshift({ id: Date.now(), appointmentId: selectedAppointment.id, title: 'Appointment cancelled', message: `Your appointment on ${selectedAppointment.date || selectedAppointment.iso} was cancelled by the admin.${msgReason}`, createdAt: Date.now(), read: false, email: selectedAppointment.email || selectedAppointment.studentEmail, studentId: selectedAppointment.studentId, target: 'student' })
-                    localStorage.setItem('notifications', JSON.stringify(arr))
-                  } catch (e) {}
-
-                  // update cancelledByOverrides
-                  try {
-                    const raw = typeof window !== 'undefined' && localStorage.getItem('cancelledByOverrides')
-                    const overrides = raw ? JSON.parse(raw) : {}
-                    overrides[String(selectedAppointment.id)] = { by: 'admin', name: adminName || 'Admin' }
-                    localStorage.setItem('cancelledByOverrides', JSON.stringify(overrides))
-                  } catch (e) {}
-
-                  // update local appointments cache so optimistic cancel persists
-                  try {
-                    const rawA = localStorage.getItem('appointments')
-                    const arrA = rawA ? JSON.parse(rawA) : []
-                    const updatedArr = (arrA || []).map(a =>
-                      a && a.id === selectedAppointment.id ? { ...a, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'admin', adminNote: reason } : a
-                    )
-                    if (!updatedArr.find(x => x && x.id === selectedAppointment.id)) {
-                      const orig = (appointments.find(a => a && a.id === selectedAppointment.id) || { id: selectedAppointment.id })
-                      updatedArr.unshift({ ...orig, status: 'cancelled', cancelReason: reason, cancelledAt: cancelledTs, cancelled_at: cancelledTs, cancelled_by: 'admin', adminNote: reason })
-                    }
-                    localStorage.setItem('appointments', JSON.stringify(updatedArr))
-                  } catch (e) {}
-
-                  // Call backend to cancel (fire-and-forget)
-                  (async () => {
-                    try {
-                      await updateAppointmentStatus(selectedAppointment.id, 'cancelled', { cancelReason: reason, adminNote: reason }, true)
-                    } catch (e) { /* ignore */ }
-                    try { await refreshAppointments() } catch (e) {}
-                  })()
-
-                  setShowDeclineModal(false)
-                  setDetailsOpen(false)
-                  setSelectedAppointment(null)
-                  setDeclineReason('')
-                  setDeclineReasonType('')
-                }}>Confirm Decline</button>
-              </div>
-            </div>
-          </div>
-        )}
-        {scheduleOpen && (
-          <div className="details-modal-overlay" onClick={() => setScheduleOpen(false)}>
-            <div className="details-modal open" onClick={e => e.stopPropagation()} style={{maxWidth:560}}>
-              <h2>Set schedule — {scheduleDay}</h2>
-              <div style={{marginTop:12}}>
-                <div style={{marginBottom:10, color:'#556', fontWeight:700}}>Existing time ranges</div>
-                {(availability[scheduleDay] || []).length === 0 && <div style={{color:'#888'}}>No schedule</div>}
-                {(availability[scheduleDay] || []).map((r, idx) => (
-                  <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #f1f1f1'}}>
-                    <div>
-                      <div style={{fontWeight:500}}>{r.start} to {r.end}</div>
-                    </div>
-                    <div style={{display:'flex', gap:8}}>
-                      <button className="close-btn" onClick={() => {
-                        setNewStart(toInputValue(r.start) || r.start)
-                        setNewEnd(toInputValue(r.end) || r.end)
-                        setNewDate(r.date || '')
-                        setNewType(r.type || '')
-                        if (r.id) {
-                          setEditingAvailId(r.id)
-                          setEditingAvailIdx(null)
-                        } else {
-                          setEditingAvailIdx(idx)
-                          setEditingAvailId(null)
-                        }
-                      }}>Edit</button>
-                      <button className="close-btn" onClick={() => removeRange(scheduleDay, idx)}>Remove</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              
-
-              <div style={{display:'flex', gap:12, marginTop:8}}>
-                <div style={{flex:1}}>
-                  <label style={{display:'block', marginBottom:6}}>Start time</label>
-                  <input type="time" value={newStart} onChange={e => setNewStart(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+      {scheduleOpen && (
+        <div className="details-modal-overlay" onClick={() => { setScheduleOpen(false); setScheduleErrors({}); }}>
+          <div className="details-modal open bg-white rounded-[32px] p-10" onClick={e => e.stopPropagation()} style={{maxWidth:600}}>
+            <h2 className="text-3xl font-black mb-2">Set Schedule</h2>
+            <p className="text-blue-600 font-bold uppercase tracking-widest mb-8">{scheduleDay}</p>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Start Time</label>
+                  <input type="time" value={newStart} onChange={e => setNewStart(e.target.value)} className={`w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold ${scheduleErrors.start ? 'border-red-500' : ''}`} />
+                  {scheduleErrors.start && <p className="text-red-500 text-xs mt-1 font-bold">{scheduleErrors.start}</p>}
                 </div>
-                <div style={{flex:1}}>
-                  <label style={{display:'block', marginBottom:6}}>End time</label>
-                  <input type="time" value={newEnd} onChange={e => setNewEnd(e.target.value)} style={{width:'100%', padding:12, borderRadius:8, border:'1px solid #e6e6e6'}} />
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">End Time</label>
+                  <input type="time" value={newEnd} onChange={e => setNewEnd(e.target.value)} className={`w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold ${scheduleErrors.end ? 'border-red-500' : ''}`} />
+                  {scheduleErrors.end && <p className="text-red-500 text-xs mt-1 font-bold">{scheduleErrors.end}</p>}
                 </div>
               </div>
-              <div style={{display:'flex', gap:12, justifyContent:'flex-start', marginTop:12}}>
-                {(() => {
-                  const maxReached = ((availability[scheduleDay] || []).filter(r => !r.date || r.date === '').length) >= 5
-                  const isEditing = Boolean(editingAvailId || editingAvailIdx !== null)
-                  return (
-                    <>
-                      <button className="approve-btn" onClick={addRange} disabled={!isEditing && maxReached}>{isEditing ? 'Save' : 'Add'}</button>
-                      {!isEditing && scheduleWarning ? <div style={{color:'#d00', marginLeft:8}}>Max 5 time ranges allowed per day</div> : null}
-                    </>
-                  )
-                })()}
-                {editingAvailId || editingAvailIdx !== null ? (
-                  <button className="close-btn" onClick={cancelEdit}>Cancel</button>
-                ) : null}
-                <button className="close-btn" onClick={() => {
-                  const hasChanges = (newStart && newStart !== '') || (newEnd && newEnd !== '') || (newDate && newDate !== '') || (newType && newType !== '') || (editingAvailId !== null && editingAvailId !== undefined) || (editingAvailIdx !== null && editingAvailIdx !== undefined)
-                  if (hasChanges) {
-                    setShowDiscardConfirm(true)
-                    return
-                  }
-                  cancelEdit(); setScheduleOpen(false)
-                }}>Done</button>
-                {showDiscardConfirm && (
-                  <div className="details-modal-overlay" onClick={() => setShowDiscardConfirm(false)}>
-                    <div className="details-modal open" onClick={e => e.stopPropagation()} style={{maxWidth:420}}>
-                      <h3>Discard changes?</h3>
-                      <p style={{color:'#666'}}>You have unsaved changes. Discard them?</p>
-                      <div style={{display:'flex', gap:12, justifyContent:'flex-end', marginTop:12}}>
-                        <button className="close-btn" onClick={() => setShowDiscardConfirm(false)}>Cancel</button>
-                        <button className="decline-btn" onClick={() => { cancelEdit(); setShowDiscardConfirm(false); setScheduleOpen(false) }}>Discard</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {scheduleErrors.general && <p className="text-red-500 text-sm font-bold text-center">{scheduleErrors.general}</p>}
+              <button className="approve-btn w-full py-4" onClick={addRange}>Save Schedule</button>
+              <button className="close-btn w-full py-4" onClick={() => { setScheduleOpen(false); setScheduleErrors({}); }}>Cancel</button>
             </div>
           </div>
-        )}
-        <Sidebar activeItem={activeItem} onSelect={(id) => {
-          if (id === 'register-visit') {
-            setShowWalkInModal(true)
-            return
-          }
-          setActiveItem(id)
-        }} />
+        </div>
+      )}
 
-        {showWalkInModal && (
-          <WalkInModal onClose={() => setShowWalkInModal(false)} onSubmit={handleWalkInSubmit} />
-        )}
-      </main>
+      {showAddDatedModal && (
+        <div className="details-modal-overlay" onClick={() => { setShowAddDatedModal(false); setDatedErrors({}); }}>
+          <div className="details-modal open bg-white rounded-[32px] p-10" onClick={e => e.stopPropagation()} style={{maxWidth:600}}>
+            <h2 className="text-3xl font-black mb-8">Add Special Slot</h2>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Date</label>
+                <input type="date" value={newDatedDate} onChange={e => setNewDatedDate(e.target.value)} className={`w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold ${datedErrors.date ? 'border-red-500' : ''}`} />
+                {datedErrors.date && <p className="text-red-500 text-xs mt-1 font-bold">{datedErrors.date}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Start Time</label>
+                  <input type="time" value={newDatedStart} onChange={e => setNewDatedStart(e.target.value)} className={`w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold ${datedErrors.start ? 'border-red-500' : ''}`} />
+                  {datedErrors.start && <p className="text-red-500 text-xs mt-1 font-bold">{datedErrors.start}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">End Time</label>
+                  <input type="time" value={newDatedEnd} onChange={e => setNewDatedEnd(e.target.value)} className={`w-full bg-gray-50 border-gray-100 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none font-bold ${datedErrors.end ? 'border-red-500' : ''}`} />
+                  {datedErrors.end && <p className="text-red-500 text-xs mt-1 font-bold">{datedErrors.end}</p>}
+                </div>
+              </div>
+              {datedErrors.general && <p className="text-red-500 text-sm font-bold text-center">{datedErrors.general}</p>}
+              <button className="approve-btn w-full py-4" onClick={saveDatedSlot}>Save Special Slot</button>
+              <button className="close-btn w-full py-4" onClick={() => { setShowAddDatedModal(false); setDatedErrors({}); }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWalkInModal && (
+        <WalkInModal onClose={() => setShowWalkInModal(false)} onSubmit={handleWalkInSubmit} />
+      ) }
+
+      {showCreateUser && (
+        <NewUserModal onClose={() => setShowCreateUser(false)} onCreate={handleCreateUser} />
+      )}
     </div>
   )
 }

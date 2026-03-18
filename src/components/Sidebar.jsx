@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Calendar, BarChart2, Settings, LogOut, ChevronsLeft, ChevronsRight, UserPlus } from 'lucide-react'
 import './Sidebar.css'
 
 export default function Sidebar({ activeItem, onSelect }) {
@@ -10,10 +11,10 @@ export default function Sidebar({ activeItem, onSelect }) {
   }, [])
 
   const items = [
-    { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'availability', label: 'Availability', icon: '⏱' },
-    { id: 'analytics', label: 'Analytics', icon: '📊' },
-    { id: 'register-visit', label: 'Walk-in', icon: '🚶' }
+    { id: 'calendar', label: 'Calendar', icon: <Calendar /> },
+    { id: 'availability', label: 'Availability', icon: <Settings /> },
+    { id: 'analytics', label: 'Analytics', icon: <BarChart2 /> },
+    { id: 'register-visit', label: 'Walk-in', icon: <UserPlus /> }
   ]
 
   return (
@@ -34,7 +35,7 @@ export default function Sidebar({ activeItem, onSelect }) {
           ))}
         </nav>
         <button className="sidebar-toggle" onClick={() => setCollapsed(!collapsed)} aria-label="Toggle sidebar">
-          <span className="chev">{collapsed ? '»' : '«'}</span>
+          {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
         </button>
       </div>
     </aside>

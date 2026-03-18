@@ -196,3 +196,19 @@
 .trash-icon { color:#900; cursor:pointer; transition:transform .2s; }
 .btn-cancel { background:#d00; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; display:flex; align-items:center; }
 .btn-cancel:hover { background:#b00; }
+
+/* Top back button above Sign in title */
+.student-login-page .auth-back.auth-top {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 0.75rem;
+}
+.student-login-page .auth-back.auth-top .btn {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
+  font-weight: 600;
+}

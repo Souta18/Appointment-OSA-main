@@ -11,9 +11,24 @@ export default function StudentLogin() {
   const navigate = useNavigate()
   const [studentId, setStudentId] = useState('')
   const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState({})
+
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) return
+    const id = setTimeout(() => setErrors({}), 2000)
+    return () => clearTimeout(id)
+  }, [errors])
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const newErrors = {}
+    if (!studentId) newErrors.studentId = 'Student number is required'
+    if (!password) newErrors.password = 'Password is required'
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
     navigate('/student/dashboard')
   }
 
@@ -21,20 +36,27 @@ export default function StudentLogin() {
     <div className="student-login-page">
     <AuthLayout side="left">
       <div className="auth-form">
+        <div className="auth-back auth-top">
+          <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+            Back
+          </Button>
+        </div>
         <h2 className="auth-title">Sign in</h2>
         <form onSubmit={handleSubmit}>
           <Input
             label="Student Number"
             placeholder="2023-0000 *"
             value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
+            onChange={(e) => { setStudentId(e.target.value); setErrors(prev => ({ ...prev, studentId: '' })) }}
+            error={errors.studentId}
           />
           <Input
             label="Password"
             type="password"
             placeholder="Password *"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => { setPassword(e.target.value); setErrors(prev => ({ ...prev, password: '' })) }}
+            error={errors.password}
           />
           <div className="form-actions">
             <Link to="/student/forgot-password" className="auth-link">
@@ -48,12 +70,6 @@ export default function StudentLogin() {
           <span className="title-line" aria-hidden />
         </p>
         <Link to="/guest/login" className="continue-guest">Continue as Guest</Link>
-
-        <div className="auth-back auth-bottom">
-          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
-            Back
-          </Button>
-        </div>
       </div>
     </AuthLayout>
     </div>

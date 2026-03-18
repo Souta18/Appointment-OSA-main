@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './NewUserModal.css'
 
 export default function NewUserModal({ onClose, onCreate }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!error) return
+    const id = setTimeout(() => setError(''), 2000)
+    return () => clearTimeout(id)
+  }, [error])
 
   const validateEmail = (e) => {
     return /\S+@\S+\.\S+/.test(e)

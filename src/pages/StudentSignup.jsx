@@ -22,36 +22,38 @@ export default function StudentSignup() {
     password: ''
   })
   const [error, setError] = useState('')
-    const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const loadingTimer = useRef(null)
-  const errorTimer = useRef(null)
+
+  // Combined effect to handle clearing all error types after 2 seconds
+  useEffect(() => {
+    const hasFieldErrors = Object.keys(errors).length > 0;
+    if (error || hasFieldErrors) {
+      const timer = setTimeout(() => {
+        if (error) setError('');
+        if (hasFieldErrors) setErrors({});
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, errors]);
 
   const showError = (msg) => {
     setError(msg)
-    if (errorTimer.current) clearTimeout(errorTimer.current)
-    errorTimer.current = setTimeout(() => {
-      setError('')
-      errorTimer.current = null
-    }, 3000)
   }
 
   useEffect(() => {
     return () => {
       if (loadingTimer.current) clearTimeout(loadingTimer.current)
-      if (errorTimer.current) clearTimeout(errorTimer.current)
     }
   }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm({ ...form, [name]: value })
+    setForm(prev => ({ ...prev, [name]: value }))
     setError('')
-    if (errorTimer.current) {
-      clearTimeout(errorTimer.current)
-      errorTimer.current = null
-    }
     setErrors(prev => {
+      if (!prev[name]) return prev
       const copy = { ...prev }
       delete copy[name]
       return copy
@@ -90,7 +92,18 @@ export default function StudentSignup() {
     } else if (name === 'password') {
       msg = validatePasswordMessage(val)
     }
-    setErrors(prev => ({ ...prev, ...(msg ? { [name]: msg } : {}) }))
+    
+    if (errors[name] === msg) return
+    
+    setErrors(prev => {
+      if (!msg) {
+        if (!prev[name]) return prev
+        const copy = { ...prev }
+        delete copy[name]
+        return copy
+      }
+      return { ...prev, [name]: msg }
+    })
   }
 
   const validateStudentNumberFormat = (s) => {
@@ -199,6 +212,11 @@ export default function StudentSignup() {
     <div className="student-login-page student-signup-page">
       <AuthLayout side="right" subtitle="Create your account">
         <div className="auth-form">
+          <div className="auth-back auth-top">
+            <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+              Back
+            </Button>
+          </div>
           <h2 className="auth-title">Sign up</h2>
           <p className="auth-subtitle-text">
             Create your Norzagaray College student account to book and manage your OSA appointments.
@@ -305,12 +323,6 @@ export default function StudentSignup() {
           <p className="auth-footer">
             Already have an account? <Link to="/student/login">Sign in</Link>
           </p>
-
-          <div className="auth-back auth-bottom">
-            <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
-              Back
-            </Button>
-          </div>
         </div>
       </AuthLayout>
     </div>

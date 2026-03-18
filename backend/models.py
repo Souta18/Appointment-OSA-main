@@ -73,6 +73,7 @@ class Appointment(Base):
     reschedule_start_time = Column(Time, nullable=True)
     reschedule_end_time = Column(Time, nullable=True)
     reschedule_reason = Column(String(500), nullable=True)
+    reschedule_requester_email = Column(String(100), nullable=True)
     # Track who created/cancelled the appointment: 'student', 'guest', 'admin', or 'system'
     created_by = Column(String(20), default=None)
     cancelled_by = Column(String(20), nullable=True)

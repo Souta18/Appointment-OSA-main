@@ -18,6 +18,13 @@
   padding: 20px;
   position: relative;
 }
+
+/* Decline modal (narrower) */
+.decline-modal {
+  max-width: 520px;
+  width: min(92%, 520px);
+  padding: 22px 24px;
+}
 .modal-no-overlay__close {
   position: absolute;
   top: 10px;
